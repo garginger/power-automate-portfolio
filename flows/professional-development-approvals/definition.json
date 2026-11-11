@@ -1,0 +1,1247 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedsharepointonline_automation"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365users": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365users_automation"
+        },
+        "api": {
+          "name": "shared_office365users"
+        }
+      },
+      "shared_approvals": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedapprovals_automation"
+        },
+        "api": {
+          "name": "shared_approvals"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365_automation"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Automation Site URL (plb_AutomationSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/Automation",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_AutomationSiteUrl",
+            "description": "IT-owned SharePoint site that hosts automation lists."
+          }
+        },
+        "PD Requests List (plb_PDRequestsList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_PDRequestsList",
+            "description": "List ID (GUID) of Professional Development Requests."
+          }
+        },
+        "Talent Team Email (plb_TalentTeamEmail)": {
+          "defaultValue": "talentdevelopment@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_TalentTeamEmail",
+            "description": "Talent Development team mailbox (CC on reminders, expiry and copy failures)."
+          }
+        },
+        "TechOps Email (plb_TechOpsEmail)": {
+          "defaultValue": "techops@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_TechOpsEmail",
+            "description": "IT operations mailbox that receives failure and hygiene alerts."
+          }
+        }
+      },
+      "triggers": {
+        "When_an_item_is_created": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnNewItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+              "table": "@parameters('PD Requests List (plb_PDRequestsList)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "recurrence": {
+            "interval": 1,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']",
+          "conditions": [
+            {
+              "expression": "@or(empty(triggerBody()?['Requester']), equals(toLower(coalesce(triggerBody()?['Author']?['Email'], '')), toLower(coalesce(triggerBody()?['Requester']?['Email'], 'none'))))"
+            }
+          ]
+        }
+      },
+      "actions": {
+        "Initialize_MgrOutcome": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "MgrOutcome",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialize_MgrComments": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "MgrComments",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_MgrOutcome": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_MgrDate": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "MgrDate",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_MgrComments": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_MgrWaits": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "MgrWaits",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_MgrDate": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SLOutcome": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "SLOutcome",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_MgrWaits": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SLComments": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "SLComments",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SLOutcome": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SLDate": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "SLDate",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SLComments": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_SLWaits": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "SLWaits",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_SLDate": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Try": {
+          "type": "Scope",
+          "actions": {
+            "Get_user_profile_(V2)": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365users",
+                  "operationId": "UserProfile_V2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users"
+                },
+                "parameters": {
+                  "id": "@triggerBody()?['Author']?['Email']"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            },
+            "Get_manager_(V2)": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365users",
+                  "operationId": "Manager_V2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users"
+                },
+                "parameters": {
+                  "id": "@triggerBody()?['Author']?['Email']"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_user_profile_(V2)": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_-_TotalCost": {
+              "type": "Compose",
+              "inputs": "@add(float(coalesce(triggerBody()?['ProgramCost'], 0)), float(coalesce(triggerBody()?['TravelCost'], 0)))",
+              "runAfter": {
+                "Get_manager_(V2)": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Update_item_-_Requester_details": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PatchItem",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                  "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                  "id": "@triggerBody()?['ID']",
+                  "item/Title": "@triggerBody()?['Title']",
+                  "item/Requester/Claims": "@triggerBody()?['Author']?['Email']",
+                  "item/Department": "@body('Get_user_profile_(V2)')?['department']",
+                  "item/JobTitle": "@body('Get_user_profile_(V2)')?['jobTitle']",
+                  "item/Manager/Claims": "@body('Get_manager_(V2)')?['mail']",
+                  "item/TotalCost": "@outputs('Compose_-_TotalCost')"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Compose_-_TotalCost": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Condition_-_Provider_details_missing": {
+              "type": "If",
+              "expression": "@and(equals(triggerBody()?['Provider']?['Value'], 'Other'), empty(trim(coalesce(triggerBody()?['VendorName'], ''))))",
+              "actions": {
+                "Update_item_-_Returned_incomplete": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                      "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                      "id": "@triggerBody()?['ID']",
+                      "item/Title": "@triggerBody()?['Title']",
+                      "item/Status/Value": "Returned - Incomplete"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "Send_incomplete_email_to_requester": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@{triggerBody()?['Author']?['Email']}",
+                      "emailMessage/Subject": "Action needed: provider details missing – @{triggerBody()?['Title']}",
+                      "emailMessage/Body": "<p>Your development request lists the provider as <strong>Other</strong> but doesn't name it, so it couldn't be routed for approval.</p><p>Please submit a new request with the provider's name filled in.</p>"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Update_item_-_Returned_incomplete": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                },
+                "Terminate_-_Returned_incomplete": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Cancelled"
+                  },
+                  "runAfter": {
+                    "Send_incomplete_email_to_requester": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Update_item_-_Requester_details": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Update_item_-_Pending_Manager_Approval": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PatchItem",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                  "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                  "id": "@triggerBody()?['ID']",
+                  "item/Title": "@triggerBody()?['Title']",
+                  "item/Status/Value": "Pending Manager Approval"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Condition_-_Provider_details_missing": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Create_Mgr_Approval": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_approvals",
+                  "operationId": "CreateAnApproval",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals"
+                },
+                "parameters": {
+                  "approvalType": "Basic",
+                  "ApprovalCreationInput/title": "Development request (Manager): @{triggerBody()?['Title']} – @{triggerBody()?['Author']?['DisplayName']}",
+                  "ApprovalCreationInput/assignedTo": "@{body('Get_manager_(V2)')?['mail']}",
+                  "ApprovalCreationInput/details": "**@{triggerBody()?['Author']?['DisplayName']}** is requesting approval for a professional development opportunity.\n\n- **Program:** @{triggerBody()?['Title']}\n- **Provider:** @{triggerBody()?['Provider']?['Value']} @{triggerBody()?['VendorName']}\n- **Dates:** @{formatDateTime(triggerBody()?['ProgramStart'], 'M/d/yyyy')} – @{formatDateTime(triggerBody()?['ProgramEnd'], 'M/d/yyyy')}\n- **Program cost:** @{formatNumber(float(coalesce(triggerBody()?['ProgramCost'], 0)), 'C2', 'en-US')}\n- **Travel cost:** @{formatNumber(float(coalesce(triggerBody()?['TravelCost'], 0)), 'C2', 'en-US')}\n- **Total:** @{formatNumber(float(coalesce(outputs('Compose_-_TotalCost'), 0)), 'C2', 'en-US')}\n\n**Description:** @{triggerBody()?['Description']}\n\nRequests over $500 also go to a senior leader after manager approval.",
+                  "ApprovalCreationInput/itemLink": "@{triggerBody()?['{Link}']}",
+                  "ApprovalCreationInput/itemLinkDescription": "Open the request",
+                  "ApprovalCreationInput/enableNotifications": true,
+                  "ApprovalCreationInput/enableReassignment": false
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Update_item_-_Pending_Manager_Approval": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Mgr_Wait_Loop": {
+              "type": "Until",
+              "expression": "@or(not(empty(variables('MgrOutcome'))), greaterOrEquals(variables('MgrWaits'), 4))",
+              "limit": {
+                "count": 6,
+                "timeout": "P14D"
+              },
+              "actions": {
+                "Wait_Mgr_Approval": {
+                  "type": "OpenApiConnectionWebhook",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_approvals",
+                      "operationId": "WaitForAnApproval",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals"
+                    },
+                    "parameters": {
+                      "approvalName": "@body('Create_Mgr_Approval')?['name']"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "limit": {
+                    "timeout": "P3D"
+                  },
+                  "runAfter": {}
+                },
+                "Increment_MgrWaits": {
+                  "type": "IncrementVariable",
+                  "inputs": {
+                    "name": "MgrWaits",
+                    "value": 1
+                  },
+                  "runAfter": {
+                    "Wait_Mgr_Approval": [
+                      "Succeeded",
+                      "TimedOut"
+                    ]
+                  }
+                },
+                "Mgr_Pending": {
+                  "type": "If",
+                  "expression": "@empty(outputs('Wait_Mgr_Approval')?['body/outcome'])",
+                  "actions": {
+                    "Condition_-_Mgr_send_reminder": {
+                      "type": "If",
+                      "expression": {
+                        "lessOrEquals": [
+                          "@variables('MgrWaits')",
+                          3
+                        ]
+                      },
+                      "actions": {
+                        "Send_Mgr_reminder": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_office365",
+                              "operationId": "SendEmailV2",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                            },
+                            "parameters": {
+                              "emailMessage/To": "@{body('Get_manager_(V2)')?['mail']}",
+                              "emailMessage/Subject": "Reminder: development request awaiting your approval – @{triggerBody()?['Author']?['DisplayName']}",
+                              "emailMessage/Body": "<p>This request has been waiting @{mul(variables('MgrWaits'), 3)} days for your decision.</p><p><strong>Requester:</strong> @{triggerBody()?['Author']?['DisplayName']}<br><strong>Program:</strong> @{triggerBody()?['Title']}<br><strong>Provider:</strong> @{triggerBody()?['Provider']?['Value']} @{triggerBody()?['VendorName']}<br><strong>Total cost:</strong> @{formatNumber(float(coalesce(outputs('Compose_-_TotalCost'), 0)), 'C2', 'en-US')}</p><p>You can respond from the original approval email, the Approvals app in Teams, or the Approvals page in Power Automate.</p>",
+                              "emailMessage/Cc": "@if(greaterOrEquals(variables('MgrWaits'), 2), parameters('Talent Team Email (plb_TalentTeamEmail)'), '')"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Set_MgrOutcome": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "MgrOutcome",
+                          "value": "@outputs('Wait_Mgr_Approval')?['body/outcome']"
+                        },
+                        "runAfter": {}
+                      },
+                      "Set_MgrComments": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "MgrComments",
+                          "value": "@coalesce(outputs('Wait_Mgr_Approval')?['body/responses'][0]?['comments'], '')"
+                        },
+                        "runAfter": {
+                          "Set_MgrOutcome": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Set_MgrDate": {
+                        "type": "SetVariable",
+                        "inputs": {
+                          "name": "MgrDate",
+                          "value": "@outputs('Wait_Mgr_Approval')?['body/responses'][0]?['responseDate']"
+                        },
+                        "runAfter": {
+                          "Set_MgrComments": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Increment_MgrWaits": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Create_Mgr_Approval": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Mgr_Expired": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@empty(variables('MgrOutcome'))",
+                  true
+                ]
+              },
+              "actions": {
+                "Update_item_-_Mgr_expired": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                      "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                      "id": "@triggerBody()?['ID']",
+                      "item/Title": "@triggerBody()?['Title']",
+                      "item/Status/Value": "Needs Attention"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "Send_Mgr_expiry_to_Talent_and_IT": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@{parameters('Talent Team Email (plb_TalentTeamEmail)')};@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                      "emailMessage/Subject": "Development request expired (Manager did not respond) – @{triggerBody()?['Author']?['DisplayName']}",
+                      "emailMessage/Body": "<p>No manager response was received after 12 days, so the request was set to <strong>Needs Attention</strong>.</p><p><strong>Requester:</strong> @{triggerBody()?['Author']?['DisplayName']}<br><strong>Program:</strong> @{triggerBody()?['Title']}<br><strong>Provider:</strong> @{triggerBody()?['Provider']?['Value']} @{triggerBody()?['VendorName']}<br><strong>Total cost:</strong> @{formatNumber(float(coalesce(outputs('Compose_-_TotalCost'), 0)), 'C2', 'en-US')}</p><p>The approval is still open in the approver's inbox, but a response now will not update the request. Please follow up manually.</p><p>Item: @{triggerBody()?['{Link}']}</p>"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Update_item_-_Mgr_expired": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                },
+                "Send_Mgr_expiry_to_requester": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@{triggerBody()?['Author']?['Email']}",
+                      "emailMessage/Subject": "Update on your development request – @{triggerBody()?['Title']}",
+                      "emailMessage/Body": "<p>Your request has not received a decision yet, so it has been passed to the Talent Development team for follow-up. You don't need to resubmit.</p>"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Send_Mgr_expiry_to_Talent_and_IT": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                },
+                "Terminate_-_Mgr_expired": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Succeeded"
+                  },
+                  "runAfter": {
+                    "Send_Mgr_expiry_to_requester": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Mgr_Wait_Loop": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Condition_-_Manager_outcome": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@variables('MgrOutcome')",
+                  "Approve"
+                ]
+              },
+              "actions": {
+                "Condition_-_Over_500": {
+                  "type": "If",
+                  "expression": {
+                    "greater": [
+                      "@float(outputs('Compose_-_TotalCost'))",
+                      500
+                    ]
+                  },
+                  "actions": {
+                    "Update_item_-_Pending_Senior_Leader_Approval": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "PatchItem",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                          "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                          "id": "@triggerBody()?['ID']",
+                          "item/Title": "@triggerBody()?['Title']",
+                          "item/Status/Value": "Pending Senior Leader Approval",
+                          "item/ManagerComments": "@variables('MgrComments')",
+                          "item/ManagerDecisionDate": "@variables('MgrDate')"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Create_SL_Approval": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_approvals",
+                          "operationId": "CreateAnApproval",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals"
+                        },
+                        "parameters": {
+                          "approvalType": "Basic",
+                          "ApprovalCreationInput/title": "Development request (Senior leader): @{triggerBody()?['Title']} – @{triggerBody()?['Author']?['DisplayName']}",
+                          "ApprovalCreationInput/assignedTo": "@{triggerBody()?['SeniorLeader']?['Email']}",
+                          "ApprovalCreationInput/details": "**@{triggerBody()?['Author']?['DisplayName']}** is requesting approval for a professional development opportunity.\n\n- **Program:** @{triggerBody()?['Title']}\n- **Provider:** @{triggerBody()?['Provider']?['Value']} @{triggerBody()?['VendorName']}\n- **Dates:** @{formatDateTime(triggerBody()?['ProgramStart'], 'M/d/yyyy')} – @{formatDateTime(triggerBody()?['ProgramEnd'], 'M/d/yyyy')}\n- **Program cost:** @{formatNumber(float(coalesce(triggerBody()?['ProgramCost'], 0)), 'C2', 'en-US')}\n- **Travel cost:** @{formatNumber(float(coalesce(triggerBody()?['TravelCost'], 0)), 'C2', 'en-US')}\n- **Total:** @{formatNumber(float(coalesce(outputs('Compose_-_TotalCost'), 0)), 'C2', 'en-US')}\n\n**Description:** @{triggerBody()?['Description']}\n\nThe requester's manager has already approved this request.",
+                          "ApprovalCreationInput/itemLink": "@{triggerBody()?['{Link}']}",
+                          "ApprovalCreationInput/itemLinkDescription": "Open the request",
+                          "ApprovalCreationInput/enableNotifications": true,
+                          "ApprovalCreationInput/enableReassignment": false
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Update_item_-_Pending_Senior_Leader_Approval": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "SL_Wait_Loop": {
+                      "type": "Until",
+                      "expression": "@or(not(empty(variables('SLOutcome'))), greaterOrEquals(variables('SLWaits'), 4))",
+                      "limit": {
+                        "count": 6,
+                        "timeout": "P14D"
+                      },
+                      "actions": {
+                        "Wait_SL_Approval": {
+                          "type": "OpenApiConnectionWebhook",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_approvals",
+                              "operationId": "WaitForAnApproval",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals"
+                            },
+                            "parameters": {
+                              "approvalName": "@body('Create_SL_Approval')?['name']"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "limit": {
+                            "timeout": "P3D"
+                          },
+                          "runAfter": {}
+                        },
+                        "Increment_SLWaits": {
+                          "type": "IncrementVariable",
+                          "inputs": {
+                            "name": "SLWaits",
+                            "value": 1
+                          },
+                          "runAfter": {
+                            "Wait_SL_Approval": [
+                              "Succeeded",
+                              "TimedOut"
+                            ]
+                          }
+                        },
+                        "SL_Pending": {
+                          "type": "If",
+                          "expression": "@empty(outputs('Wait_SL_Approval')?['body/outcome'])",
+                          "actions": {
+                            "Condition_-_SL_send_reminder": {
+                              "type": "If",
+                              "expression": {
+                                "lessOrEquals": [
+                                  "@variables('SLWaits')",
+                                  3
+                                ]
+                              },
+                              "actions": {
+                                "Send_SL_reminder": {
+                                  "type": "OpenApiConnection",
+                                  "inputs": {
+                                    "host": {
+                                      "connectionName": "shared_office365",
+                                      "operationId": "SendEmailV2",
+                                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                    },
+                                    "parameters": {
+                                      "emailMessage/To": "@{triggerBody()?['SeniorLeader']?['Email']}",
+                                      "emailMessage/Subject": "Reminder: development request awaiting your approval – @{triggerBody()?['Author']?['DisplayName']}",
+                                      "emailMessage/Body": "<p>This request has been waiting @{mul(variables('SLWaits'), 3)} days for your decision.</p><p><strong>Requester:</strong> @{triggerBody()?['Author']?['DisplayName']}<br><strong>Program:</strong> @{triggerBody()?['Title']}<br><strong>Provider:</strong> @{triggerBody()?['Provider']?['Value']} @{triggerBody()?['VendorName']}<br><strong>Total cost:</strong> @{formatNumber(float(coalesce(outputs('Compose_-_TotalCost'), 0)), 'C2', 'en-US')}</p><p>You can respond from the original approval email, the Approvals app in Teams, or the Approvals page in Power Automate.</p>",
+                                      "emailMessage/Cc": "@if(greaterOrEquals(variables('SLWaits'), 2), parameters('Talent Team Email (plb_TalentTeamEmail)'), '')"
+                                    },
+                                    "authentication": "@parameters('$authentication')"
+                                  },
+                                  "runAfter": {}
+                                }
+                              },
+                              "else": {
+                                "actions": {}
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {
+                              "Set_SLOutcome": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                  "name": "SLOutcome",
+                                  "value": "@outputs('Wait_SL_Approval')?['body/outcome']"
+                                },
+                                "runAfter": {}
+                              },
+                              "Set_SLComments": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                  "name": "SLComments",
+                                  "value": "@coalesce(outputs('Wait_SL_Approval')?['body/responses'][0]?['comments'], '')"
+                                },
+                                "runAfter": {
+                                  "Set_SLOutcome": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Set_SLDate": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                  "name": "SLDate",
+                                  "value": "@outputs('Wait_SL_Approval')?['body/responses'][0]?['responseDate']"
+                                },
+                                "runAfter": {
+                                  "Set_SLComments": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "runAfter": {
+                            "Increment_SLWaits": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Create_SL_Approval": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "SL_Expired": {
+                      "type": "If",
+                      "expression": {
+                        "equals": [
+                          "@empty(variables('SLOutcome'))",
+                          true
+                        ]
+                      },
+                      "actions": {
+                        "Update_item_-_SL_expired": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "PatchItem",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                              "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                              "id": "@triggerBody()?['ID']",
+                              "item/Title": "@triggerBody()?['Title']",
+                              "item/Status/Value": "Needs Attention"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        },
+                        "Send_SL_expiry_to_Talent_and_IT": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_office365",
+                              "operationId": "SendEmailV2",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                            },
+                            "parameters": {
+                              "emailMessage/To": "@{parameters('Talent Team Email (plb_TalentTeamEmail)')};@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                              "emailMessage/Subject": "Development request expired (Senior leader did not respond) – @{triggerBody()?['Author']?['DisplayName']}",
+                              "emailMessage/Body": "<p>No senior leader response was received after 12 days, so the request was set to <strong>Needs Attention</strong>.</p><p><strong>Requester:</strong> @{triggerBody()?['Author']?['DisplayName']}<br><strong>Program:</strong> @{triggerBody()?['Title']}<br><strong>Provider:</strong> @{triggerBody()?['Provider']?['Value']} @{triggerBody()?['VendorName']}<br><strong>Total cost:</strong> @{formatNumber(float(coalesce(outputs('Compose_-_TotalCost'), 0)), 'C2', 'en-US')}</p><p>The approval is still open in the approver's inbox, but a response now will not update the request. Please follow up manually.</p><p>Item: @{triggerBody()?['{Link}']}</p>"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "Update_item_-_SL_expired": [
+                              "Succeeded",
+                              "Failed"
+                            ]
+                          }
+                        },
+                        "Send_SL_expiry_to_requester": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_office365",
+                              "operationId": "SendEmailV2",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                            },
+                            "parameters": {
+                              "emailMessage/To": "@{triggerBody()?['Author']?['Email']}",
+                              "emailMessage/Subject": "Update on your development request – @{triggerBody()?['Title']}",
+                              "emailMessage/Body": "<p>Your request has not received a decision yet, so it has been passed to the Talent Development team for follow-up. You don't need to resubmit.</p>"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "Send_SL_expiry_to_Talent_and_IT": [
+                              "Succeeded",
+                              "Failed"
+                            ]
+                          }
+                        },
+                        "Terminate_-_SL_expired": {
+                          "type": "Terminate",
+                          "inputs": {
+                            "runStatus": "Succeeded"
+                          },
+                          "runAfter": {
+                            "Send_SL_expiry_to_requester": [
+                              "Succeeded",
+                              "Failed"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {
+                        "SL_Wait_Loop": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Condition_-_SL_outcome": {
+                      "type": "If",
+                      "expression": {
+                        "equals": [
+                          "@variables('SLOutcome')",
+                          "Approve"
+                        ]
+                      },
+                      "actions": {
+                        "Update_item_-_SL_Approved": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "PatchItem",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                              "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                              "id": "@triggerBody()?['ID']",
+                              "item/Title": "@triggerBody()?['Title']",
+                              "item/Status/Value": "Approved",
+                              "item/SLComments": "@variables('SLComments')",
+                              "item/SLDecisionDate": "@variables('SLDate')"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        },
+                        "Send_approved_email_-_SL": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_office365",
+                              "operationId": "SendEmailV2",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                            },
+                            "parameters": {
+                              "emailMessage/To": "@{triggerBody()?['Author']?['Email']}",
+                              "emailMessage/Subject": "Approved: @{triggerBody()?['Title']}",
+                              "emailMessage/Body": "<p>Good news: your development request has been <strong>approved</strong>.</p><p><strong>Requester:</strong> @{triggerBody()?['Author']?['DisplayName']}<br><strong>Program:</strong> @{triggerBody()?['Title']}<br><strong>Provider:</strong> @{triggerBody()?['Provider']?['Value']} @{triggerBody()?['VendorName']}<br><strong>Total cost:</strong> @{formatNumber(float(coalesce(outputs('Compose_-_TotalCost'), 0)), 'C2', 'en-US')}</p><p>The Talent Development team will follow up with next steps.</p>",
+                              "emailMessage/Cc": "@{parameters('Talent Team Email (plb_TalentTeamEmail)')}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "Update_item_-_SL_Approved": [
+                              "Succeeded",
+                              "Failed"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Update_item_-_SL_Rejected": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "PatchItem",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                                "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                                "id": "@triggerBody()?['ID']",
+                                "item/Title": "@triggerBody()?['Title']",
+                                "item/Status/Value": "Rejected",
+                                "item/SLComments": "@variables('SLComments')",
+                                "item/SLDecisionDate": "@variables('SLDate')"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {}
+                          },
+                          "Send_rejected_email_-_SL": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_office365",
+                                "operationId": "SendEmailV2",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                              },
+                              "parameters": {
+                                "emailMessage/To": "@{triggerBody()?['Author']?['Email']}",
+                                "emailMessage/Subject": "Not approved: @{triggerBody()?['Title']}",
+                                "emailMessage/Body": "<p>Your development request was <strong>not approved</strong>.</p><p><strong>Requester:</strong> @{triggerBody()?['Author']?['DisplayName']}<br><strong>Program:</strong> @{triggerBody()?['Title']}<br><strong>Provider:</strong> @{triggerBody()?['Provider']?['Value']} @{triggerBody()?['VendorName']}<br><strong>Total cost:</strong> @{formatNumber(float(coalesce(outputs('Compose_-_TotalCost'), 0)), 'C2', 'en-US')}</p><p><strong>Comments:</strong> @{coalesce(variables('SLComments'), 'None provided')}</p><p>Please talk with your manager if you have questions.</p>",
+                                "emailMessage/Cc": "@{parameters('Talent Team Email (plb_TalentTeamEmail)')}"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "Update_item_-_SL_Rejected": [
+                                "Succeeded",
+                                "Failed"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "SL_Expired": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Update_item_-_Approved_(manager_only)": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "PatchItem",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                            "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                            "id": "@triggerBody()?['ID']",
+                            "item/Title": "@triggerBody()?['Title']",
+                            "item/Status/Value": "Approved",
+                            "item/ManagerComments": "@variables('MgrComments')",
+                            "item/ManagerDecisionDate": "@variables('MgrDate')"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {}
+                      },
+                      "Send_approved_email_-_Manager": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_office365",
+                            "operationId": "SendEmailV2",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                          },
+                          "parameters": {
+                            "emailMessage/To": "@{triggerBody()?['Author']?['Email']}",
+                            "emailMessage/Subject": "Approved: @{triggerBody()?['Title']}",
+                            "emailMessage/Body": "<p>Good news: your development request has been <strong>approved</strong>.</p><p><strong>Requester:</strong> @{triggerBody()?['Author']?['DisplayName']}<br><strong>Program:</strong> @{triggerBody()?['Title']}<br><strong>Provider:</strong> @{triggerBody()?['Provider']?['Value']} @{triggerBody()?['VendorName']}<br><strong>Total cost:</strong> @{formatNumber(float(coalesce(outputs('Compose_-_TotalCost'), 0)), 'C2', 'en-US')}</p><p>The Talent Development team will follow up with next steps.</p>",
+                            "emailMessage/Cc": "@{parameters('Talent Team Email (plb_TalentTeamEmail)')}"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {
+                          "Update_item_-_Approved_(manager_only)": [
+                            "Succeeded",
+                            "Failed"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {
+                  "Update_item_-_Manager_Rejected": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "PatchItem",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                        "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                        "id": "@triggerBody()?['ID']",
+                        "item/Title": "@triggerBody()?['Title']",
+                        "item/Status/Value": "Rejected",
+                        "item/ManagerComments": "@variables('MgrComments')",
+                        "item/ManagerDecisionDate": "@variables('MgrDate')"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runAfter": {}
+                  },
+                  "Send_rejected_email_-_Manager": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_office365",
+                        "operationId": "SendEmailV2",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                      },
+                      "parameters": {
+                        "emailMessage/To": "@{triggerBody()?['Author']?['Email']}",
+                        "emailMessage/Subject": "Not approved: @{triggerBody()?['Title']}",
+                        "emailMessage/Body": "<p>Your development request was <strong>not approved</strong>.</p><p><strong>Requester:</strong> @{triggerBody()?['Author']?['DisplayName']}<br><strong>Program:</strong> @{triggerBody()?['Title']}<br><strong>Provider:</strong> @{triggerBody()?['Provider']?['Value']} @{triggerBody()?['VendorName']}<br><strong>Total cost:</strong> @{formatNumber(float(coalesce(outputs('Compose_-_TotalCost'), 0)), 'C2', 'en-US')}</p><p><strong>Comments:</strong> @{coalesce(variables('MgrComments'), 'None provided')}</p><p>Please talk with your manager if you have questions.</p>",
+                        "emailMessage/Cc": "@{parameters('Talent Team Email (plb_TalentTeamEmail)')}"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runAfter": {
+                      "Update_item_-_Manager_Rejected": [
+                        "Succeeded",
+                        "Failed"
+                      ]
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Mgr_Expired": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_SLWaits": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Catch": {
+          "type": "Scope",
+          "actions": {
+            "Filter_array_-_Failed_actions": {
+              "type": "Query",
+              "inputs": {
+                "from": "@result('Try')",
+                "where": "@contains(createArray('Failed', 'TimedOut'), item()?['status'])"
+              },
+              "runAfter": {}
+            },
+            "Update_item_-_Routing_Error": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PatchItem",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                  "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                  "id": "@triggerBody()?['ID']",
+                  "item/Title": "@triggerBody()?['Title']",
+                  "item/Status/Value": "Routing Error"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Filter_array_-_Failed_actions": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Send_IT_failure_alert": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
+                "parameters": {
+                  "emailMessage/To": "@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                  "emailMessage/Subject": "PD Approvals flow FAILED – @{triggerBody()?['Title']}",
+                  "emailMessage/Body": "<p>The intake and approval flow failed and the request was set to <strong>Routing Error</strong>.</p><p><strong>Error:</strong> @{coalesce(first(body('Filter_array_-_Failed_actions'))?['error']?['message'], 'No error message returned')}</p><p>Item: @{triggerBody()?['{Link}']}<br>Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p>",
+                  "emailMessage/Importance": "High"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Update_item_-_Routing_Error": [
+                  "Succeeded",
+                  "Failed"
+                ]
+              }
+            },
+            "Terminate_-_Failed": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "RoutingError",
+                  "message": "See failure alert for details."
+                }
+              },
+              "runAfter": {
+                "Send_IT_failure_alert": [
+                  "Succeeded",
+                  "Failed"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Try": [
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

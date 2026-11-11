@@ -1,0 +1,532 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedsharepointonline_automation"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365groups": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365groups_automation"
+        },
+        "api": {
+          "name": "shared_office365groups"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365_automation"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Automation Site URL (plb_AutomationSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/Automation",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_AutomationSiteUrl",
+            "description": "IT-owned SharePoint site that hosts automation lists."
+          }
+        },
+        "Referral Tracker List (plb_ReferralTrackerList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ReferralTrackerList",
+            "description": "List ID (GUID) of the branch Referral Tracker."
+          }
+        },
+        "Report Team Group ID (plb_ReportTeamGroupId)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ReportTeamGroupId",
+            "description": "Microsoft 365 group (object ID) whose members form the report roster."
+          }
+        },
+        "Report Recipients (plb_ReportRecipients)": {
+          "defaultValue": "retailmanager@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ReportRecipients",
+            "description": "Semicolon-separated recipients of the monthly activity report."
+          }
+        }
+      },
+      "triggers": {
+        "Recurrence": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Month",
+            "interval": 1,
+            "timeZone": "Eastern Standard Time",
+            "schedule": {
+              "monthDays": [
+                1
+              ],
+              "hours": [
+                "6"
+              ],
+              "minutes": [
+                0
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Compose_-_ReportStart": {
+          "type": "Compose",
+          "inputs": "@startOfMonth(subtractFromTime(utcNow(), 1, 'Month'))",
+          "runAfter": {}
+        },
+        "Compose_-_ReportEnd": {
+          "type": "Compose",
+          "inputs": "@startOfMonth(utcNow())",
+          "runAfter": {
+            "Compose_-_ReportStart": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_RefCategories": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "RefCategories",
+                "type": "array",
+                "value": [
+                  "Referral - Commercial Lending",
+                  "Referral - Consumer Loan",
+                  "Referral - Deposit Products",
+                  "Referral - Home Equity",
+                  "Referral - Financial Coaching",
+                  "Referral - Mortgage",
+                  "Referral - Treasury Management",
+                  "Referral - Credit Card",
+                  "Referral - Business Deposits",
+                  "Referral - Investment Services",
+                  "Referral - Insurance",
+                  "Service - Account Opening",
+                  "Service - Card Support",
+                  "Service - Digital Banking Support",
+                  "Service - Loan Payment",
+                  "Service - Other"
+                ]
+              }
+            ]
+          },
+          "runAfter": {
+            "Compose_-_ReportEnd": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_Exclusions": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "Exclusions",
+                "type": "array",
+                "value": [
+                  "teamlead@contoso.com"
+                ]
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_RefCategories": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_HtmlRows": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "HtmlRows",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_Exclusions": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_MatrixRows": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "MatrixRows",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_HtmlRows": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_RowCells": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "RowCells",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_MatrixRows": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_TotalCount": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "TotalCount",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_RowCells": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_group_members": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365groups",
+              "operationId": "ListGroupMembers",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365groups"
+            },
+            "parameters": {
+              "groupId": "@parameters('Report Team Group ID (plb_ReportTeamGroupId)')",
+              "$top": 999
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Initialize_TotalCount": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Get_items_-_Last_month": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+              "table": "@parameters('Referral Tracker List (plb_ReferralTrackerList)')",
+              "$filter": "Created ge '@{outputs('Compose_-_ReportStart')}' and Created lt '@{outputs('Compose_-_ReportEnd')}'"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runtimeConfiguration": {
+            "paginationPolicy": {
+              "minimumItemCount": 5000
+            }
+          },
+          "runAfter": {
+            "List_group_members": [
+              "Succeeded"
+            ]
+          }
+        },
+        "FlatItems": {
+          "type": "Select",
+          "inputs": {
+            "from": "@body('Get_items_-_Last_month')?['value']",
+            "select": {
+              "Member": "@toLower(coalesce(item()?['TeamMember']?['Email'], item()?['Author']?['Email']))",
+              "MemberName": "@coalesce(item()?['TeamMember']?['DisplayName'], item()?['Author']?['DisplayName'])",
+              "LoggedBy": "@item()?['Author']?['DisplayName']",
+              "Created": "@item()?['Created']",
+              "Cats": "@if(empty(item()?['Category']), '', join(xpath(xml(json(concat('{\"root\":{\"c\":', string(item()?['Category']), '}}'))), '/root/c/Value/text()'), ', '))",
+              "Amount": "@float(coalesce(item()?['AmountClosed'], 0))",
+              "Notes": "@coalesce(item()?['Notes'], '')"
+            }
+          },
+          "runAfter": {
+            "Get_items_-_Last_month": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Apply_to_each_-_Team_member": {
+          "type": "Foreach",
+          "foreach": "@body('List_group_members')?['value']",
+          "actions": {
+            "Condition_-_Not_excluded": {
+              "type": "If",
+              "expression": {
+                "not": {
+                  "contains": [
+                    "@variables('Exclusions')",
+                    "@toLower(items('Apply_to_each_-_Team_member')?['mail'])"
+                  ]
+                }
+              },
+              "actions": {
+                "EmpName": {
+                  "type": "Compose",
+                  "inputs": "@items('Apply_to_each_-_Team_member')?['displayName']",
+                  "runAfter": {}
+                },
+                "EmpItems": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('FlatItems')",
+                    "where": "@equals(item()?['Member'], toLower(items('Apply_to_each_-_Team_member')?['mail']))"
+                  },
+                  "runAfter": {
+                    "EmpName": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Append_to_HtmlRows": {
+                  "type": "AppendToStringVariable",
+                  "inputs": {
+                    "name": "HtmlRows",
+                    "value": "<tr><td style=\"padding:6px 8px;border:1px solid #cccccc;\">@{outputs('EmpName')}</td><td style=\"padding:6px 8px;border:1px solid #cccccc;text-align:center;\">@{length(body('EmpItems'))}</td></tr>"
+                  },
+                  "runAfter": {
+                    "EmpItems": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Increment_TotalCount": {
+                  "type": "IncrementVariable",
+                  "inputs": {
+                    "name": "TotalCount",
+                    "value": "@length(body('EmpItems'))"
+                  },
+                  "runAfter": {
+                    "Append_to_HtmlRows": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Condition_-_Has_activity": {
+                  "type": "If",
+                  "expression": {
+                    "greater": [
+                      "@length(body('EmpItems'))",
+                      0
+                    ]
+                  },
+                  "actions": {
+                    "Set_RowCells": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "RowCells",
+                        "value": "<td style=\"padding:6px 8px;border:1px solid #cccccc;font-weight:bold;\">@{outputs('EmpName')}</td>"
+                      },
+                      "runAfter": {}
+                    },
+                    "Apply_to_each_-_Category": {
+                      "type": "Foreach",
+                      "foreach": "@variables('RefCategories')",
+                      "actions": {
+                        "CatItems": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('EmpItems')",
+                            "where": "@contains(item()?['Cats'], items('Apply_to_each_-_Category'))"
+                          },
+                          "runAfter": {}
+                        },
+                        "CatAmounts": {
+                          "type": "Select",
+                          "inputs": {
+                            "from": "@body('CatItems')",
+                            "select": "@item()?['Amount']"
+                          },
+                          "runAfter": {
+                            "CatItems": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Append_to_RowCells": {
+                          "type": "AppendToStringVariable",
+                          "inputs": {
+                            "name": "RowCells",
+                            "value": "@{concat('<td style=\"padding:6px 8px;border:1px solid #cccccc;text-align:center;font-size:12px;\">', string(length(body('CatItems'))), '<br><span style=\"color:#1a5632;\">$', formatNumber(if(empty(body('CatItems')), 0, float(xpath(xml(json(concat('{\"root\":{\"n\":', string(body('CatAmounts')), '}}'))), 'sum(//n)'))), 'N0'), '</span></td>')}"
+                          },
+                          "runAfter": {
+                            "CatAmounts": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {
+                        "Set_RowCells": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Append_to_MatrixRows": {
+                      "type": "AppendToStringVariable",
+                      "inputs": {
+                        "name": "MatrixRows",
+                        "value": "<tr>@{variables('RowCells')}</tr>"
+                      },
+                      "runAfter": {
+                        "Apply_to_each_-_Category": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Increment_TotalCount": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {}
+            }
+          },
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          },
+          "runAfter": {
+            "FlatItems": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Select_-_Detail_rows": {
+          "type": "Select",
+          "inputs": {
+            "from": "@body('FlatItems')",
+            "select": {
+              "SortKey": "@concat(item()?['MemberName'], '|', item()?['Created'])",
+              "Row": "@concat('<tr><td style=\"padding:6px 8px;border:1px solid #cccccc;\">', formatDateTime(convertFromUtc(item()?['Created'], 'Eastern Standard Time'), 'M/d/yyyy'), '</td><td style=\"padding:6px 8px;border:1px solid #cccccc;\">', item()?['MemberName'], '</td><td style=\"padding:6px 8px;border:1px solid #cccccc;\">', item()?['LoggedBy'], '</td><td style=\"padding:6px 8px;border:1px solid #cccccc;\">', item()?['Cats'], '</td><td style=\"padding:6px 8px;border:1px solid #cccccc;text-align:right;\">', formatNumber(item()?['Amount'], 'C0', 'en-US'), '</td><td style=\"padding:6px 8px;border:1px solid #cccccc;\">', item()?['Notes'], '</td></tr>')"
+            }
+          },
+          "runAfter": {
+            "Apply_to_each_-_Team_member": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Select_-_Sorted_detail_rows": {
+          "type": "Select",
+          "inputs": {
+            "from": "@sort(body('Select_-_Detail_rows'), 'SortKey')",
+            "select": "@item()?['Row']"
+          },
+          "runAfter": {
+            "Select_-_Detail_rows": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Compose_-_DetailRows_HTML": {
+          "type": "Compose",
+          "inputs": "@join(body('Select_-_Sorted_detail_rows'), '')",
+          "runAfter": {
+            "Select_-_Sorted_detail_rows": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Compose_-_EmailBody": {
+          "type": "Compose",
+          "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;\"><div style=\"background:#1a5632;color:#fff;padding:12px 16px;font-size:18px;font-weight:bold;\">Team Activity Report – @{formatDateTime(outputs('Compose_-_ReportStart'), 'MMMM yyyy')}</div><p>Activity logged in the Referral Tracker by team members during the month. All figures are computed directly from list data.</p><h3 style=\"color:#1a5632;border-bottom:2px solid #1a5632;padding-bottom:4px;font-size:16px;\">Actions by Team Member</h3><table cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;font-size:13px;\"><tr style=\"background:#1a5632;color:#fff;\"><th style=\"padding:8px;border:1px solid #cccccc;text-align:left;\">Team Member</th><th style=\"padding:8px;border:1px solid #cccccc;\">Actions</th></tr>@{variables('HtmlRows')}</table><p><strong>Total team actions:</strong> @{variables('TotalCount')}</p><h3 style=\"color:#1a5632;border-bottom:2px solid #1a5632;padding-bottom:4px;font-size:16px;\">Breakdown by Team Member and Category</h3><table cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;width:100%;font-size:11px;\"><tr style=\"background:#1a5632;color:#fff;text-align:center;\"><th style=\"padding:8px;border:1px solid #cccccc;text-align:left;\">Team Member</th><th style=\"padding:8px;border:1px solid #cccccc;\">Comm.<br>Lending</th><th style=\"padding:8px;border:1px solid #cccccc;\">Consumer<br>Loan</th><th style=\"padding:8px;border:1px solid #cccccc;\">Deposit</th><th style=\"padding:8px;border:1px solid #cccccc;\">Home<br>Equity</th><th style=\"padding:8px;border:1px solid #cccccc;\">Fin.<br>Coaching</th><th style=\"padding:8px;border:1px solid #cccccc;\">Mortgage</th><th style=\"padding:8px;border:1px solid #cccccc;\">Treasury</th><th style=\"padding:8px;border:1px solid #cccccc;\">Credit<br>Card</th><th style=\"padding:8px;border:1px solid #cccccc;\">Business<br>Deposits</th><th style=\"padding:8px;border:1px solid #cccccc;\">Invest-<br>ments</th><th style=\"padding:8px;border:1px solid #cccccc;\">Insurance</th><th style=\"padding:8px;border:1px solid #cccccc;\">Acct<br>Opening</th><th style=\"padding:8px;border:1px solid #cccccc;\">Card<br>Support</th><th style=\"padding:8px;border:1px solid #cccccc;\">Digital<br>Support</th><th style=\"padding:8px;border:1px solid #cccccc;\">Loan<br>Payment</th><th style=\"padding:8px;border:1px solid #cccccc;\">Other</th></tr>@{variables('MatrixRows')}</table><p style=\"font-size:12px;color:#666;font-style:italic;\">Each cell shows count / dollars closed. An interaction tagged with more than one category is counted in each, so category counts can exceed a member's total actions. Members with no activity are omitted from this table.</p><h3 style=\"color:#1a5632;border-bottom:2px solid #1a5632;padding-bottom:4px;font-size:16px;\">Detail</h3><table cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;font-size:12px;\"><tr style=\"background:#F2F2F2;\"><th style=\"padding:8px;border:1px solid #cccccc;\">Date</th><th style=\"padding:8px;border:1px solid #cccccc;\">Member</th><th style=\"padding:8px;border:1px solid #cccccc;\">Logged By</th><th style=\"padding:8px;border:1px solid #cccccc;\">Category</th><th style=\"padding:8px;border:1px solid #cccccc;\">Amount Closed</th><th style=\"padding:8px;border:1px solid #cccccc;\">Notes</th></tr>@{outputs('Compose_-_DetailRows_HTML')}</table></div>",
+          "runAfter": {
+            "Compose_-_DetailRows_HTML": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Send_an_email_(V2)": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "emailMessage/To": "@{parameters('Report Recipients (plb_ReportRecipients)')}",
+              "emailMessage/Subject": "Monthly team activity report – @{formatDateTime(outputs('Compose_-_ReportStart'), 'MMMM yyyy')}",
+              "emailMessage/Body": "@{outputs('Compose_-_EmailBody')}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Compose_-_EmailBody": [
+              "Succeeded"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

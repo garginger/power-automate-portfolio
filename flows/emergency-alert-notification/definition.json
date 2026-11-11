@@ -1,0 +1,194 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedsharepointonline_automation"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365_automation"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Alerts Site URL (plb_AlertsSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/Intranet",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_AlertsSiteUrl",
+            "description": "Intranet site that hosts the Emergency Alerts list."
+          }
+        },
+        "Emergency Alerts List (plb_EmergencyAlertsList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_EmergencyAlertsList",
+            "description": "List ID (GUID) of Emergency Alerts."
+          }
+        },
+        "Senior Team DL (plb_SeniorTeamDL)": {
+          "defaultValue": "seniorteam@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_SeniorTeamDL",
+            "description": "Mail-enabled distribution group for the senior team."
+          }
+        },
+        "Facilities DL (plb_FacilitiesDL)": {
+          "defaultValue": "facilities@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_FacilitiesDL",
+            "description": "Mail-enabled distribution group for facilities."
+          }
+        },
+        "Helpdesk Email (plb_HelpdeskEmail)": {
+          "defaultValue": "helpdesk@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_HelpdeskEmail",
+            "description": "Monitored mailbox that receives emergency-alert delivery failures."
+          }
+        }
+      },
+      "triggers": {
+        "When_an_item_is_created": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnNewItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('Alerts Site URL (plb_AlertsSiteUrl)')",
+              "table": "@parameters('Emergency Alerts List (plb_EmergencyAlertsList)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "recurrence": {
+            "interval": 1,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']"
+        }
+      },
+      "actions": {
+        "Build_Email_Body": {
+          "type": "Compose",
+          "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;font-size:15px;\"><p style=\"font-size:18px;font-weight:bold;color:#C00000;\">EMERGENCY ALERT SYSTEM - NEW INCIDENT</p><table cellpadding=\"6\" cellspacing=\"0\" border=\"0\" style=\"border-collapse:collapse;\"><tr><td style=\"font-weight:bold;background:#F2F2F2;\">Alert Type</td><td>@{coalesce(triggerBody()?['Alert_x0020_Type']?['Value'], 'Not specified')}</td></tr><tr><td style=\"font-weight:bold;background:#F2F2F2;\">Location</td><td>@{coalesce(triggerBody()?['Location']?['Value'], 'Not specified')}</td></tr><tr><td style=\"font-weight:bold;background:#F2F2F2;\">Description</td><td>@{coalesce(triggerBody()?['BriefDescription'], '-')}</td></tr><tr><td style=\"font-weight:bold;background:#F2F2F2;\">Submitted by</td><td>@{coalesce(triggerBody()?['Author']?['DisplayName'], 'Unknown')}</td></tr><tr><td style=\"font-weight:bold;background:#F2F2F2;\">Submitted at</td><td>@{convertFromUtc(triggerBody()?['Created'], 'Eastern Standard Time', 'MMM dd, yyyy h:mm:ss tt')}</td></tr></table><p style=\"font-size:12px;color:#666666;\">Automated notification from the Emergency Alert System. Item ID @{triggerBody()?['ID']}.</p></div>",
+          "runAfter": {}
+        },
+        "Send_Emergency_Notification": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "emailMessage/To": "@{parameters('Senior Team DL (plb_SeniorTeamDL)')};@{parameters('Facilities DL (plb_FacilitiesDL)')}",
+              "emailMessage/Subject": "EMERGENCY ALERT: @{coalesce(triggerBody()?['Alert_x0020_Type']?['Value'], 'Not specified')} - @{coalesce(triggerBody()?['Location']?['Value'], 'Not specified')}",
+              "emailMessage/Body": "@{outputs('Build_Email_Body')}",
+              "emailMessage/Importance": "High"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Build_Email_Body": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Build_Confirmation_Body": {
+          "type": "Compose",
+          "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;font-size:15px;\"><p>Hi @{first(split(coalesce(triggerBody()?['Author']?['DisplayName'], 'there'), ' '))},</p><p>Your emergency alert was received and has been sent to the Senior Team and Facilities. <strong>No further action is needed to notify them.</strong></p><p>If this is a life-threatening emergency, call 911.</p><table cellpadding=\"6\" cellspacing=\"0\" border=\"0\" style=\"border-collapse:collapse;\"><tr><td style=\"font-weight:bold;background:#F2F2F2;\">Alert Type</td><td>@{coalesce(triggerBody()?['Alert_x0020_Type']?['Value'], 'Not specified')}</td></tr><tr><td style=\"font-weight:bold;background:#F2F2F2;\">Location</td><td>@{coalesce(triggerBody()?['Location']?['Value'], 'Not specified')}</td></tr><tr><td style=\"font-weight:bold;background:#F2F2F2;\">Submitted at</td><td>@{convertFromUtc(triggerBody()?['Created'], 'Eastern Standard Time', 'MMM dd, yyyy h:mm:ss tt')}</td></tr></table><p style=\"font-size:12px;color:#666666;margin-top:20px;\">Reference ID @{triggerBody()?['ID']}</p></div>",
+          "runAfter": {
+            "Send_Emergency_Notification": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Send_Submitter_Confirmation": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "emailMessage/To": "@{triggerBody()?['Author']?['Email']}",
+              "emailMessage/Subject": "Your emergency alert was sent",
+              "emailMessage/Body": "@{outputs('Build_Confirmation_Body')}"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Build_Confirmation_Body": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Build_Failure_Body": {
+          "type": "Compose",
+          "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;font-size:15px;\"><p style=\"color:#C00000;font-weight:bold;\">The Emergency Alert System failed to notify responders. Contact the Senior Team and Facilities manually.</p><p>Item ID: @{triggerBody()?['ID']}<br>Alert Type: @{coalesce(triggerBody()?['Alert_x0020_Type']?['Value'], 'Not specified')}<br>Location: @{coalesce(triggerBody()?['Location']?['Value'], 'Not specified')}<br>Description: @{coalesce(triggerBody()?['BriefDescription'], '-')}<br>Submitted by: @{coalesce(triggerBody()?['Author']?['DisplayName'], 'Unknown')}<br>Submitted at: @{convertFromUtc(triggerBody()?['Created'], 'Eastern Standard Time', 'MMM dd, yyyy h:mm:ss tt')} ET</p><p>Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p></div>",
+          "runAfter": {
+            "Send_Emergency_Notification": [
+              "Failed",
+              "TimedOut",
+              "Skipped"
+            ]
+          }
+        },
+        "Notify_On_Failure": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "SendEmailV2",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "emailMessage/To": "@{parameters('Helpdesk Email (plb_HelpdeskEmail)')}",
+              "emailMessage/Subject": "FAILED: Emergency Alert System notification did not send",
+              "emailMessage/Body": "@{outputs('Build_Failure_Body')}",
+              "emailMessage/Importance": "High"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Build_Failure_Body": [
+              "Succeeded"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

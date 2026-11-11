@@ -1,0 +1,40 @@
+{
+  "EnvironmentVariables": [
+    {
+      "SchemaName": "plb_AutomationSiteUrl",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_PDRequestsList",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_TalentSiteUrl",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_DevTrackerList",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_TechOpsEmail",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_TalentTeamEmail",
+      "Value": ""
+    }
+  ],
+  "ConnectionReferences": [
+    {
+      "LogicalName": "plb_sharedsharepointonline_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+    },
+    {
+      "LogicalName": "plb_sharedoffice365_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+    }
+  ]
+}

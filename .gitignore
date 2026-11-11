@@ -1,0 +1,9 @@
+# Private sanitization rules: never commit (they contain the terms being protected)
+.sanitize-denylist.txt
+
+# Raw tenant exports stay local until sanitized
+exports/
+*.zip
+
+__pycache__/
+.DS_Store

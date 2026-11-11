@@ -1,0 +1,62 @@
+{
+  "EnvironmentVariables": [
+    {
+      "SchemaName": "plb_TalentSiteUrl",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_ElpApplicationList",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_ElpReviewersGroupId",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_ServiceAccountUserId",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_SpFullControlRoleId",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_SpEditRoleId",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_ElpReviewerEmail",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_ElpSenderMailbox",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_TechOpsEmail",
+      "Value": ""
+    }
+  ],
+  "ConnectionReferences": [
+    {
+      "LogicalName": "plb_sharedsharepointonline_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+    },
+    {
+      "LogicalName": "plb_sharedoffice365users_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_office365users"
+    },
+    {
+      "LogicalName": "plb_sharedapprovals_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_approvals"
+    },
+    {
+      "LogicalName": "plb_sharedoffice365_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+    }
+  ]
+}

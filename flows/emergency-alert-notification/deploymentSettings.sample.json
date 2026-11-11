@@ -1,0 +1,36 @@
+{
+  "EnvironmentVariables": [
+    {
+      "SchemaName": "plb_AlertsSiteUrl",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_EmergencyAlertsList",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_SeniorTeamDL",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_FacilitiesDL",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_HelpdeskEmail",
+      "Value": ""
+    }
+  ],
+  "ConnectionReferences": [
+    {
+      "LogicalName": "plb_sharedsharepointonline_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+    },
+    {
+      "LogicalName": "plb_sharedoffice365_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+    }
+  ]
+}

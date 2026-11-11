@@ -1,0 +1,242 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_office365users": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365users_automation"
+        },
+        "api": {
+          "name": "shared_office365users"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365_automation"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "TechOps Email (plb_TechOpsEmail)": {
+          "defaultValue": "techops@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_TechOpsEmail",
+            "description": "IT operations mailbox that receives failure and hygiene alerts."
+          }
+        }
+      },
+      "triggers": {
+        "Recurrence": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "timeZone": "Eastern Standard Time",
+            "schedule": {
+              "weekDays": [
+                "Monday"
+              ],
+              "hours": [
+                "7"
+              ],
+              "minutes": [
+                0
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Initialize_nextLink": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "nextLink",
+                "type": "string",
+                "value": "https://graph.microsoft.com/v1.0/users?$select=displayName,mail,accountEnabled,userType,department&$expand=manager($select=displayName,mail,accountEnabled)&$top=999"
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialize_allUsers": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "allUsers",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_nextLink": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Do_until_-_All_pages": {
+          "type": "Until",
+          "expression": "@empty(variables('nextLink'))",
+          "limit": {
+            "count": 60,
+            "timeout": "PT1H"
+          },
+          "actions": {
+            "Send_an_HTTP_request": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365users",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users"
+                },
+                "parameters": {
+                  "Uri": "@variables('nextLink')",
+                  "Method": "GET"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            },
+            "Merge": {
+              "type": "Compose",
+              "inputs": "@union(variables('allUsers'), body('Send_an_HTTP_request')?['value'])",
+              "runAfter": {
+                "Send_an_HTTP_request": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_allUsers": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "allUsers",
+                "value": "@outputs('Merge')"
+              },
+              "runAfter": {
+                "Merge": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Set_nextLink": {
+              "type": "SetVariable",
+              "inputs": {
+                "name": "nextLink",
+                "value": "@coalesce(body('Send_an_HTTP_request')?['@odata.nextLink'], '')"
+              },
+              "runAfter": {
+                "Set_allUsers": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_allUsers": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Filter_array": {
+          "type": "Query",
+          "inputs": {
+            "from": "@variables('allUsers')",
+            "where": "@and(equals(item()?['accountEnabled'], true), equals(item()?['userType'], 'Member'), equals(item()?['manager']?['accountEnabled'], false))"
+          },
+          "runAfter": {
+            "Do_until_-_All_pages": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Condition_-_Any_matches": {
+          "type": "If",
+          "expression": {
+            "greater": [
+              "@length(body('Filter_array'))",
+              0
+            ]
+          },
+          "actions": {
+            "Select": {
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Filter_array')",
+                "select": {
+                  "Employee": "@item()?['displayName']",
+                  "Email": "@item()?['mail']",
+                  "Department": "@item()?['department']",
+                  "Disabled manager": "@item()?['manager']?['displayName']"
+                }
+              },
+              "runAfter": {}
+            },
+            "Create_HTML_table": {
+              "type": "Table",
+              "inputs": {
+                "from": "@body('Select')",
+                "format": "HTML"
+              },
+              "runAfter": {
+                "Select": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Send_an_email_(V2)": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
+                "parameters": {
+                  "emailMessage/To": "@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                  "emailMessage/Subject": "AD hygiene: @{length(body('Filter_array'))} user(s) report to a disabled manager",
+                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>These enabled staff accounts still list a <strong>disabled</strong> account as their manager. Approval flows that use Get manager will route to a dead mailbox until this is fixed.</p>@{body('Create_HTML_table')}<p>Fix: update the Manager attribute in on-premises AD; the change syncs to Entra ID on the next Entra Connect cycle.</p></div>"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Create_HTML_table": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Filter_array": [
+              "Succeeded"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

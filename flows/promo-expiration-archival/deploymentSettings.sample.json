@@ -1,0 +1,32 @@
+{
+  "EnvironmentVariables": [
+    {
+      "SchemaName": "plb_PromosSiteUrl",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_PromosLibrary",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_ArchiveFolderPath",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_TechOpsEmail",
+      "Value": ""
+    }
+  ],
+  "ConnectionReferences": [
+    {
+      "LogicalName": "plb_sharedsharepointonline_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+    },
+    {
+      "LogicalName": "plb_sharedoffice365_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+    }
+  ]
+}

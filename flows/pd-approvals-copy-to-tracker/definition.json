@@ -1,0 +1,395 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedsharepointonline_automation"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365_automation"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Automation Site URL (plb_AutomationSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/Automation",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_AutomationSiteUrl",
+            "description": "IT-owned SharePoint site that hosts automation lists."
+          }
+        },
+        "PD Requests List (plb_PDRequestsList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_PDRequestsList",
+            "description": "List ID (GUID) of Professional Development Requests."
+          }
+        },
+        "Talent Site URL (plb_TalentSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/TalentDevelopment",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_TalentSiteUrl",
+            "description": "Talent Development team site."
+          }
+        },
+        "Development Tracker List (plb_DevTrackerList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_DevTrackerList",
+            "description": "List ID (GUID) of the Talent team's Development Tracker."
+          }
+        },
+        "TechOps Email (plb_TechOpsEmail)": {
+          "defaultValue": "techops@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_TechOpsEmail",
+            "description": "IT operations mailbox that receives failure and hygiene alerts."
+          }
+        },
+        "Talent Team Email (plb_TalentTeamEmail)": {
+          "defaultValue": "talentdevelopment@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_TalentTeamEmail",
+            "description": "Talent Development team mailbox (CC on reminders, expiry and copy failures)."
+          }
+        }
+      },
+      "triggers": {
+        "When_an_item_is_created_or_modified": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnUpdatedItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+              "table": "@parameters('PD Requests List (plb_PDRequestsList)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "recurrence": {
+            "interval": 1,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']",
+          "conditions": [
+            {
+              "expression": "@or(equals(triggerOutputs()?['body/Status/Value'], 'Approved'), equals(triggerOutputs()?['body/Status/Value'], 'Auto-Approved'))"
+            },
+            {
+              "expression": "@not(equals(triggerOutputs()?['body/TrackerCopied'], true))"
+            }
+          ],
+          "runtimeConfiguration": {
+            "concurrency": {
+              "runs": 1
+            }
+          }
+        }
+      },
+      "actions": {
+        "Try": {
+          "type": "Scope",
+          "actions": {
+            "Get_item_-_Recheck": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "GetItem",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                  "table": "@parameters('PD Requests List (plb_PDRequestsList)')",
+                  "id": "@triggerOutputs()?['body/ID']"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            },
+            "Condition_-_Already_copied": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@body('Get_item_-_Recheck')?['TrackerCopied']",
+                  true
+                ]
+              },
+              "actions": {
+                "Terminate_-_Already_copied": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Succeeded"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Get_item_-_Recheck": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_-_Placeholder": {
+              "type": "Compose",
+              "inputs": "Needs Update",
+              "runAfter": {
+                "Condition_-_Already_copied": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_-_EmployeesTrained": {
+              "type": "Compose",
+              "inputs": "@json(concat('[{\"Claims\":\"', triggerOutputs()?['body/Requester/Email'], '\"}]'))",
+              "runAfter": {
+                "Compose_-_Placeholder": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_-_TrackerProvider": {
+              "type": "Compose",
+              "inputs": "@coalesce(json('{\"CU League\":\"CU League\",\"Payments Association\":\"Payments Association\",\"Core Processor\":\"Core Processor\"}')?[coalesce(triggerOutputs()?['body/Provider/Value'], 'none')], outputs('Compose_-_Placeholder'))",
+              "runAfter": {
+                "Compose_-_EmployeesTrained": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Compose_-_TrackerComment": {
+              "type": "Compose",
+              "inputs": "Copied from Professional Development Requests on @{formatDateTime(convertFromUtc(utcNow(), 'Eastern Standard Time'), 'M/d/yyyy')}\nRequester: @{triggerOutputs()?['body/Requester/DisplayName']}\nProvider (as submitted): @{triggerOutputs()?['body/Provider/Value']} @{triggerOutputs()?['body/VendorName']}\nDescription: @{triggerOutputs()?['body/Description']}\nProgram cost: @{formatNumber(float(coalesce(triggerOutputs()?['body/ProgramCost'], 0)), 'C2', 'en-US')}   Travel: @{formatNumber(float(coalesce(triggerOutputs()?['body/TravelCost'], 0)), 'C2', 'en-US')}   Total: @{formatNumber(float(coalesce(triggerOutputs()?['body/TotalCost'], 0)), 'C2', 'en-US')}\n\nManager: @{triggerOutputs()?['body/Manager/DisplayName']}, decided @{if(empty(triggerOutputs()?['body/ManagerDecisionDate']), 'n/a', formatDateTime(convertFromUtc(triggerOutputs()?['body/ManagerDecisionDate'], 'Eastern Standard Time'), 'M/d/yyyy'))}\nSenior leader: @{triggerOutputs()?['body/SeniorLeader/DisplayName']}, decided @{if(empty(triggerOutputs()?['body/SLDecisionDate']), 'n/a (<= $500)', formatDateTime(convertFromUtc(triggerOutputs()?['body/SLDecisionDate'], 'Eastern Standard Time'), 'M/d/yyyy'))}\n\nSource request: @{triggerOutputs()?['body/{Link}']}",
+              "runAfter": {
+                "Compose_-_TrackerProvider": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_items_-_Existing_tracker_copy": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "GetItems",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                  "table": "@parameters('Development Tracker List (plb_DevTrackerList)')",
+                  "$filter": "PDSourceID eq @{triggerOutputs()?['body/ID']}",
+                  "$top": 1
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Compose_-_TrackerComment": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Condition_-_Tracker_copy_exists": {
+              "type": "If",
+              "expression": {
+                "greater": [
+                  "@length(body('Get_items_-_Existing_tracker_copy')?['value'])",
+                  0
+                ]
+              },
+              "actions": {
+                "Stamp_source_-_Existing_copy": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{parameters('PD Requests List (plb_PDRequestsList)')}')/items(@{triggerOutputs()?['body/ID']})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata",
+                        "IF-MATCH": "*",
+                        "X-HTTP-Method": "MERGE"
+                      },
+                      "parameters/body": {
+                        "TrackerCopied": true,
+                        "TrackerItemId": "@first(body('Get_items_-_Existing_tracker_copy')?['value'])?['ID']"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {
+                  "Create_item_-_Development_Tracker": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "PostItem",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                        "table": "@parameters('Development Tracker List (plb_DevTrackerList)')",
+                        "item/Title": "@triggerOutputs()?['body/Title']",
+                        "item/TrainingHoursPerEmployee": "@triggerOutputs()?['body/TotalHours']",
+                        "item/AdditionalExpensePerEmployee": "@triggerOutputs()?['body/TotalCost']",
+                        "item/StartDate": "@triggerOutputs()?['body/ProgramStart']",
+                        "item/EndDate": "@triggerOutputs()?['body/ProgramEnd']",
+                        "item/EmployeesTrained": "@outputs('Compose_-_EmployeesTrained')",
+                        "item/Provider/Value": "@outputs('Compose_-_TrackerProvider')",
+                        "item/EducationType/Value": "@outputs('Compose_-_Placeholder')",
+                        "item/Executive": [
+                          {
+                            "Value": "@outputs('Compose_-_Placeholder')"
+                          }
+                        ],
+                        "item/Department": [
+                          {
+                            "Value": "@outputs('Compose_-_Placeholder')"
+                          }
+                        ],
+                        "item/IsThisForAnIDP/Value": "@outputs('Compose_-_Placeholder')",
+                        "item/CommentSection": "@outputs('Compose_-_TrackerComment')",
+                        "item/ManagerApprovalComments": "@triggerOutputs()?['body/ManagerComments']",
+                        "item/SeniorLeaderApprovalComments": "@triggerOutputs()?['body/SLComments']",
+                        "item/Source": "PD Approvals Automation",
+                        "item/PDSourceID": "@triggerOutputs()?['body/ID']"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runAfter": {}
+                  },
+                  "Stamp_source_-_Copied": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "HttpRequest",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+                        "parameters/method": "POST",
+                        "parameters/uri": "_api/web/lists(guid'@{parameters('PD Requests List (plb_PDRequestsList)')}')/items(@{triggerOutputs()?['body/ID']})",
+                        "parameters/headers": {
+                          "Accept": "application/json;odata=nometadata",
+                          "Content-Type": "application/json;odata=nometadata",
+                          "IF-MATCH": "*",
+                          "X-HTTP-Method": "MERGE"
+                        },
+                        "parameters/body": {
+                          "TrackerCopied": true,
+                          "TrackerItemId": "@outputs('Create_item_-_Development_Tracker')?['body/ID']"
+                        }
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runAfter": {
+                      "Create_item_-_Development_Tracker": [
+                        "Succeeded"
+                      ]
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Get_items_-_Existing_tracker_copy": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {}
+        },
+        "Catch": {
+          "type": "Scope",
+          "actions": {
+            "Send_copy_failure_alert": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
+                "parameters": {
+                  "emailMessage/To": "@{parameters('TechOps Email (plb_TechOpsEmail)')};@{parameters('Talent Team Email (plb_TalentTeamEmail)')}",
+                  "emailMessage/Subject": "@{concat('PD Approvals -> Development Tracker copy FAILED: ', triggerOutputs()?['body/Title'])}",
+                  "emailMessage/Body": "<p>An approved request could not be copied to the Development Tracker. It will retry the next time the source item is modified, or IT can rerun it.</p><p>Item: @{triggerOutputs()?['body/{Link}']}<br>Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p>",
+                  "emailMessage/Importance": "High"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            },
+            "Terminate_-_Copy_failed": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "CopyFailed",
+                  "message": "Copy to Development Tracker failed."
+                }
+              },
+              "runAfter": {
+                "Send_copy_failure_alert": [
+                  "Succeeded",
+                  "Failed"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Try": [
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

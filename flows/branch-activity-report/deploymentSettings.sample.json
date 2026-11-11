@@ -1,0 +1,37 @@
+{
+  "EnvironmentVariables": [
+    {
+      "SchemaName": "plb_AutomationSiteUrl",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_ReferralTrackerList",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_ReportTeamGroupId",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_ReportRecipients",
+      "Value": ""
+    }
+  ],
+  "ConnectionReferences": [
+    {
+      "LogicalName": "plb_sharedsharepointonline_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+    },
+    {
+      "LogicalName": "plb_sharedoffice365groups_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_office365groups"
+    },
+    {
+      "LogicalName": "plb_sharedoffice365_automation",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+    }
+  ]
+}

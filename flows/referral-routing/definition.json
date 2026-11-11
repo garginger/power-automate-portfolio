@@ -1,0 +1,215 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedsharepointonline_automation"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365_automation"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Automation Site URL (plb_AutomationSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/Automation",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_AutomationSiteUrl",
+            "description": "IT-owned SharePoint site that hosts automation lists."
+          }
+        },
+        "Referral Tracker List (plb_ReferralTrackerList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ReferralTrackerList",
+            "description": "List ID (GUID) of the branch Referral Tracker."
+          }
+        },
+        "Referral Routing List (plb_ReferralRoutingList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ReferralRoutingList",
+            "description": "List ID (GUID) of the Referral Routing table (route -> recipients)."
+          }
+        },
+        "TechOps Email (plb_TechOpsEmail)": {
+          "defaultValue": "techops@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_TechOpsEmail",
+            "description": "IT operations mailbox that receives failure and hygiene alerts."
+          }
+        }
+      },
+      "triggers": {
+        "When_an_item_is_created": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnNewItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+              "table": "@parameters('Referral Tracker List (plb_ReferralTrackerList)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "recurrence": {
+            "interval": 1,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']"
+        }
+      },
+      "actions": {
+        "Get_items_-_Referral_Routing": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('Automation Site URL (plb_AutomationSiteUrl)')",
+              "table": "@parameters('Referral Routing List (plb_ReferralRoutingList)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        },
+        "Filter_array_-_Matching_route": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Get_items_-_Referral_Routing')?['value']",
+            "where": "@and(equals(item()?['Title'], triggerOutputs()?['body/TeamAssigned/Value']), equals(item()?['Active'], true))"
+          },
+          "runAfter": {
+            "Get_items_-_Referral_Routing": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Select_Category_Values": {
+          "type": "Select",
+          "inputs": {
+            "from": "@triggerOutputs()?['body/Category']",
+            "select": "@item()?['Value']"
+          },
+          "runAfter": {
+            "Filter_array_-_Matching_route": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Compose_Email_Body": {
+          "type": "Compose",
+          "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p style=\"font-size:16px;font-weight:bold;\">New referral for @{triggerOutputs()?['body/TeamAssigned/Value']}</p><table cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;\"><tr><td style=\"padding:6px 8px;border:1px solid #cccccc;font-weight:bold;background:#F2F2F2;\">Member</td><td style=\"padding:6px 8px;border:1px solid #cccccc;\">@{triggerOutputs()?['body/Title']}</td></tr><tr><td style=\"padding:6px 8px;border:1px solid #cccccc;font-weight:bold;background:#F2F2F2;\">Account # (if applicable)</td><td style=\"padding:6px 8px;border:1px solid #cccccc;\">@{coalesce(triggerOutputs()?['body/Account_x0023__x0028_ifapplicabl'], '-')}</td></tr><tr><td style=\"padding:6px 8px;border:1px solid #cccccc;font-weight:bold;background:#F2F2F2;\">Categories</td><td style=\"padding:6px 8px;border:1px solid #cccccc;\">@{join(body('Select_Category_Values'), ', ')}</td></tr><tr><td style=\"padding:6px 8px;border:1px solid #cccccc;font-weight:bold;background:#F2F2F2;\">Location context</td><td style=\"padding:6px 8px;border:1px solid #cccccc;\">@{coalesce(triggerOutputs()?['body/LocationContext'], '-')}</td></tr><tr><td style=\"padding:6px 8px;border:1px solid #cccccc;font-weight:bold;background:#F2F2F2;\">Notes</td><td style=\"padding:6px 8px;border:1px solid #cccccc;\">@{coalesce(triggerOutputs()?['body/Notes'], '-')}</td></tr><tr><td style=\"padding:6px 8px;border:1px solid #cccccc;font-weight:bold;background:#F2F2F2;\">Referred by</td><td style=\"padding:6px 8px;border:1px solid #cccccc;\">@{triggerOutputs()?['body/Author/DisplayName']}</td></tr></table><p><a href=\"@{triggerOutputs()?['body/{Link}']}\">Open the referral</a> to claim it and record the outcome.</p></div>",
+          "runAfter": {
+            "Select_Category_Values": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Condition_-_Route_matched": {
+          "type": "If",
+          "expression": {
+            "greater": [
+              "@length(body('Filter_array_-_Matching_route'))",
+              0
+            ]
+          },
+          "actions": {
+            "Condition_-_Notify_enabled": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@first(body('Filter_array_-_Matching_route'))?['Notify']",
+                  true
+                ]
+              },
+              "actions": {
+                "Send_referral_email": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@{first(body('Filter_array_-_Matching_route'))?['Recipient']}",
+                      "emailMessage/Subject": "New referral: @{triggerOutputs()?['body/TeamAssigned/Value']} – @{triggerOutputs()?['body/Title']}",
+                      "emailMessage/Body": "@{outputs('Compose_Email_Body')}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {}
+            }
+          },
+          "else": {
+            "actions": {
+              "Send_unmatched_route_alert": {
+                "type": "OpenApiConnection",
+                "inputs": {
+                  "host": {
+                    "connectionName": "shared_office365",
+                    "operationId": "SendEmailV2",
+                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                  },
+                  "parameters": {
+                    "emailMessage/To": "@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                    "emailMessage/Subject": "Referral routing: no active route for '@{triggerOutputs()?['body/TeamAssigned/Value']}'",
+                    "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>A referral was submitted for a team with no active row in the Referral Routing list, so nobody was notified.</p><p>Add or activate the route, then forward the referral to the right team.</p><p>Item: @{triggerOutputs()?['body/{Link}']}</p></div>",
+                    "emailMessage/Importance": "High"
+                  },
+                  "authentication": "@parameters('$authentication')"
+                },
+                "runAfter": {}
+              }
+            }
+          },
+          "runAfter": {
+            "Compose_Email_Body": [
+              "Succeeded"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

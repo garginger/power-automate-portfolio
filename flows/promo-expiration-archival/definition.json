@@ -1,0 +1,282 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedsharepointonline_automation"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365_automation"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Promos Site URL (plb_PromosSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/RatesPromos",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_PromosSiteUrl",
+            "description": "Site that hosts the member-facing promotions library."
+          }
+        },
+        "Promos Library (plb_PromosLibrary)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_PromosLibrary",
+            "description": "Library ID (GUID) of the live promotions document library."
+          }
+        },
+        "Archive Folder Path (plb_ArchiveFolderPath)": {
+          "defaultValue": "/Archive Library",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ArchiveFolderPath",
+            "description": "Server-relative folder that expired promotions are moved into."
+          }
+        },
+        "TechOps Email (plb_TechOpsEmail)": {
+          "defaultValue": "techops@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_TechOpsEmail",
+            "description": "IT operations mailbox that receives failure and hygiene alerts."
+          }
+        }
+      },
+      "triggers": {
+        "Recurrence": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Day",
+            "interval": 1,
+            "timeZone": "Eastern Standard Time",
+            "schedule": {
+              "hours": [
+                "6"
+              ],
+              "minutes": [
+                0
+              ]
+            }
+          }
+        }
+      },
+      "actions": {
+        "Initialize_arcFailures": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "arcFailures",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Get_files_(properties_only)": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetFileItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('Promos Site URL (plb_PromosSiteUrl)')",
+              "table": "@parameters('Promos Library (plb_PromosLibrary)')",
+              "$filter": "PromoExpirationDate lt '@{formatDateTime(convertFromUtc(utcNow(), 'Eastern Standard Time'), 'yyyy-MM-dd')}'"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runtimeConfiguration": {
+            "paginationPolicy": {
+              "minimumItemCount": 5000
+            }
+          },
+          "runAfter": {
+            "Initialize_arcFailures": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Apply_to_each": {
+          "type": "Foreach",
+          "foreach": "@body('Get_files_(properties_only)')?['value']",
+          "actions": {
+            "Update_file_properties": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "PatchFileItem",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Promos Site URL (plb_PromosSiteUrl)')",
+                  "table": "@parameters('Promos Library (plb_PromosLibrary)')",
+                  "id": "@items('Apply_to_each')?['ID']",
+                  "item/ShowonRatesPromos": false
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            },
+            "Try_Archive": {
+              "type": "Scope",
+              "actions": {
+                "Get_file_metadata": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "GetFileMetadata",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('Promos Site URL (plb_PromosSiteUrl)')",
+                      "id": "@items('Apply_to_each')?['{Identifier}']"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "Move_file": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "MoveFile",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('Promos Site URL (plb_PromosSiteUrl)')",
+                      "parameters/sourceFileId": "@body('Get_file_metadata')?['Id']",
+                      "parameters/destinationDataset": "@parameters('Promos Site URL (plb_PromosSiteUrl)')",
+                      "parameters/destinationFolderPath": "@parameters('Archive Folder Path (plb_ArchiveFolderPath)')",
+                      "parameters/nameConflictBehavior": 1
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Get_file_metadata": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Update_file_properties": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Catch_Archive": {
+              "type": "Scope",
+              "actions": {
+                "Filter_array": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@result('Try_Archive')",
+                    "where": "@equals(item()?['status'], 'Failed')"
+                  },
+                  "runAfter": {}
+                },
+                "Append_to_array_variable": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "arcFailures",
+                    "value": "@{concat(coalesce(items('Apply_to_each')?['Title'], items('Apply_to_each')?['{FilenameWithExtension}']), ' (ID ', string(items('Apply_to_each')?['ID']), ') - ', coalesce(first(body('Filter_array'))?['error']?['message'], 'No error message returned'))}"
+                  },
+                  "runAfter": {
+                    "Filter_array": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Try_Archive": [
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            }
+          },
+          "runtimeConfiguration": {
+            "concurrency": {
+              "repetitions": 1
+            }
+          },
+          "runAfter": {
+            "Get_files_(properties_only)": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Condition_-_Any_failures": {
+          "type": "If",
+          "expression": {
+            "greater": [
+              "@length(variables('arcFailures'))",
+              0
+            ]
+          },
+          "actions": {
+            "Send_an_email_(V2)": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
+                "parameters": {
+                  "emailMessage/To": "@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                  "emailMessage/Subject": "Rates & Promos archive: @{length(variables('arcFailures'))} file(s) failed to move",
+                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>These expired promotions were hidden from the live page but could not be moved to the archive. Tomorrow's run will retry them.</p><p>@{join(variables('arcFailures'), '<br>')}</p></div>"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Apply_to_each": [
+              "Succeeded"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

@@ -1,0 +1,2122 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedsharepointonline_automation"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365users": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365users_automation"
+        },
+        "api": {
+          "name": "shared_office365users"
+        }
+      },
+      "shared_approvals": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedapprovals_automation"
+        },
+        "api": {
+          "name": "shared_approvals"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365_automation"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "Talent Site URL (plb_TalentSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/TalentDevelopment",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_TalentSiteUrl",
+            "description": "Talent Development team site."
+          }
+        },
+        "ELP Application List (plb_ElpApplicationList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ElpApplicationList",
+            "description": "List ID (GUID) of Emerging Leaders Application."
+          }
+        },
+        "ELP Reviewers Group ID (plb_ElpReviewersGroupId)": {
+          "defaultValue": "0",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ElpReviewersGroupId",
+            "description": "SharePoint site group ID of ELP Reviewers (GET _api/web/sitegroups/getbyname('ELP Reviewers')?$select=Id)."
+          }
+        },
+        "Service Account User ID (plb_ServiceAccountUserId)": {
+          "defaultValue": "0",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ServiceAccountUserId",
+            "description": "SharePoint site user ID of the automation service account."
+          }
+        },
+        "SP Full Control Role ID (plb_SpFullControlRoleId)": {
+          "defaultValue": "1073741829",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_SpFullControlRoleId",
+            "description": "Role definition ID for Full Control (SharePoint default; confirm via _api/web/roledefinitions)."
+          }
+        },
+        "SP Edit Role ID (plb_SpEditRoleId)": {
+          "defaultValue": "1073741830",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_SpEditRoleId",
+            "description": "Role definition ID for Edit (SharePoint default; confirm via _api/web/roledefinitions)."
+          }
+        },
+        "ELP Reviewer Email (plb_ElpReviewerEmail)": {
+          "defaultValue": "programowner@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ElpReviewerEmail",
+            "description": "Program owner who reviews Emerging Leaders applications. One-field change to a shared mailbox."
+          }
+        },
+        "ELP Sender Mailbox (plb_ElpSenderMailbox)": {
+          "defaultValue": "talentdevelopment@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_ElpSenderMailbox",
+            "description": "Shared mailbox the flow sends as (service account needs Send As)."
+          }
+        },
+        "TechOps Email (plb_TechOpsEmail)": {
+          "defaultValue": "techops@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_TechOpsEmail",
+            "description": "IT operations mailbox that receives failure and hygiene alerts."
+          }
+        }
+      },
+      "triggers": {
+        "When_an_item_is_created": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnNewItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+              "table": "@parameters('ELP Application List (plb_ElpApplicationList)')"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "recurrence": {
+            "interval": 1,
+            "frequency": "Minute"
+          },
+          "splitOn": "@triggerOutputs()?['body/value']"
+        }
+      },
+      "actions": {
+        "Initialize_varItemLink": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varItemLink",
+                "type": "string",
+                "value": "@triggerBody()?['{Link}']"
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialize_varApplicant": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varApplicant",
+                "type": "string",
+                "value": "@triggerBody()?['Author']?['DisplayName']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varItemLink": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varApplicantEmail": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varApplicantEmail",
+                "type": "string",
+                "value": "@triggerBody()?['Author']?['Email']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varApplicant": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varSupResponded": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSupResponded",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varApplicantEmail": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varSupWaits": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSupWaits",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varSupResponded": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varSupComments": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSupComments",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varSupWaits": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varSupOutcome": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSupOutcome",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varSupComments": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varSupDate": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSupDate",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varSupOutcome": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varAlumResponded": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAlumResponded",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varSupDate": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varAlumWaits": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAlumWaits",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varAlumResponded": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varAlumComments": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAlumComments",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varAlumWaits": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varAlumOutcome": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAlumOutcome",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varAlumComments": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varAlumDate": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAlumDate",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varAlumOutcome": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varSupEmail": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSupEmail",
+                "type": "string",
+                "value": "@triggerBody()?['Supervisor']?['Email']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varAlumDate": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varSupName": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSupName",
+                "type": "string",
+                "value": "@triggerBody()?['Supervisor']?['DisplayName']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varSupEmail": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varAlumEmail": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAlumEmail",
+                "type": "string",
+                "value": "@triggerBody()?['ProgramAlumni']?['Email']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varSupName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varAlumName": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAlumName",
+                "type": "string",
+                "value": "@triggerBody()?['ProgramAlumni']?['DisplayName']"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varAlumEmail": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varReviewerEmail": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varReviewerEmail",
+                "type": "string",
+                "value": "@parameters('ELP Reviewer Email (plb_ElpReviewerEmail)')"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varAlumName": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Try": {
+          "type": "Scope",
+          "actions": {
+            "Scope_Lock_item": {
+              "type": "Scope",
+              "actions": {
+                "HTTP_Break_Inheritance": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "HTTP_Grant_Service_Account": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/roleassignments/addroleassignment(principalid=@{parameters('Service Account User ID (plb_ServiceAccountUserId)')},roledefid=@{parameters('SP Full Control Role ID (plb_SpFullControlRoleId)')})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "HTTP_Break_Inheritance": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "HTTP_Grant_Reviewers": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/roleassignments/addroleassignment(principalid=@{parameters('ELP Reviewers Group ID (plb_ElpReviewersGroupId)')},roledefid=@{parameters('SP Edit Role ID (plb_SpEditRoleId)')})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "HTTP_Grant_Service_Account": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {}
+            },
+            "Compose_Stopped_Lock_Values": {
+              "type": "Compose",
+              "inputs": {
+                "formValues": [
+                  {
+                    "FieldName": "Application_x0020_Status",
+                    "FieldValue": "Stopped"
+                  }
+                ],
+                "bNewDocumentUpdate": false
+              },
+              "runAfter": {
+                "Scope_Lock_item": [
+                  "Failed",
+                  "TimedOut"
+                ]
+              }
+            },
+            "HTTP_Set_Stopped_Lock": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                  "parameters/method": "POST",
+                  "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=nometadata"
+                  },
+                  "parameters/body": "@outputs('Compose_Stopped_Lock_Values')"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Compose_Stopped_Lock_Values": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Email_Lock_Failed": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
+                "parameters": {
+                  "emailMessage/To": "@{variables('varReviewerEmail')};@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                  "emailMessage/Subject": "ELP application stopped: item could not be locked – @{variables('varApplicant')}",
+                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>The flow could not restrict permissions on this application, so it stopped before any recommendation request went out. List-level item permissions still limit it to the applicant and reviewers.</p><p>Item: @{variables('varItemLink')}<br>Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p></div>",
+                  "emailMessage/Importance": "High"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "HTTP_Set_Stopped_Lock": [
+                  "Succeeded",
+                  "Failed"
+                ]
+              }
+            },
+            "Terminate_Lock_Failed": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "LockFailed",
+                  "message": "Item permissions could not be set."
+                }
+              },
+              "runAfter": {
+                "Email_Lock_Failed": [
+                  "Succeeded",
+                  "Failed"
+                ]
+              }
+            },
+            "Compose_Initial_Values": {
+              "type": "Compose",
+              "inputs": {
+                "formValues": [
+                  {
+                    "FieldName": "Title",
+                    "FieldValue": "ELP – @{variables('varApplicant')}"
+                  },
+                  {
+                    "FieldName": "Application_x0020_Status",
+                    "FieldValue": "Awaiting Recommendations"
+                  }
+                ],
+                "bNewDocumentUpdate": false
+              },
+              "runAfter": {
+                "Scope_Lock_item": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "HTTP_Set_Initial_Values": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                  "parameters/method": "POST",
+                  "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=nometadata"
+                  },
+                  "parameters/body": "@outputs('Compose_Initial_Values')"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Compose_Initial_Values": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Condition_Initial_Values_Failed": {
+              "type": "If",
+              "expression": {
+                "equals": [
+                  "@contains(string(body('HTTP_Set_Initial_Values')), '\"HasException\":true')",
+                  true
+                ]
+              },
+              "actions": {
+                "Email_Initial_Values_Failed": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                      "emailMessage/Subject": "ELP flow stopped: initial values write failed – @{variables('varApplicant')}",
+                      "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>ValidateUpdateListItem returned HasException on the initial write. No recommendation requests were sent.</p><p>Item: @{variables('varItemLink')}<br>Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p></div>"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "Terminate_Initial_Values_Failed": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Failed",
+                    "runError": {
+                      "code": "InitialWriteFailed",
+                      "message": "Initial values could not be written."
+                    }
+                  },
+                  "runAfter": {
+                    "Email_Initial_Values_Failed": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "HTTP_Set_Initial_Values": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Condition_Recommenders_Invalid": {
+              "type": "If",
+              "expression": {
+                "or": [
+                  {
+                    "equals": [
+                      "@toLower(variables('varSupEmail'))",
+                      "@toLower(variables('varApplicantEmail'))"
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@toLower(variables('varAlumEmail'))",
+                      "@toLower(variables('varApplicantEmail'))"
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@toLower(variables('varSupEmail'))",
+                      "@toLower(variables('varAlumEmail'))"
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Compose_Invalid_Reason": {
+                  "type": "Compose",
+                  "inputs": "@if(equals(toLower(variables('varSupEmail')), toLower(variables('varApplicantEmail'))), 'The applicant named themselves as supervisor.', if(equals(toLower(variables('varAlumEmail')), toLower(variables('varApplicantEmail'))), 'The applicant named themselves as the program alumni recommender.', 'The same person was named as both supervisor and program alumni recommender.'))",
+                  "runAfter": {}
+                },
+                "Compose_Stopped_Values": {
+                  "type": "Compose",
+                  "inputs": {
+                    "formValues": [
+                      {
+                        "FieldName": "Application_x0020_Status",
+                        "FieldValue": "Stopped"
+                      }
+                    ],
+                    "bNewDocumentUpdate": false
+                  },
+                  "runAfter": {
+                    "Compose_Invalid_Reason": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "HTTP_Set_Stopped_Invalid": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      },
+                      "parameters/body": "@outputs('Compose_Stopped_Values')"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Compose_Stopped_Values": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Email_Recommenders_Invalid": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@{variables('varReviewerEmail')}",
+                      "emailMessage/Subject": "Emerging Leaders application stopped: @{variables('varApplicant')}",
+                      "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>The application from <strong>@{variables('varApplicant')}</strong> was stopped before any recommendation request went out.</p><p><strong>Reason:</strong> @{outputs('Compose_Invalid_Reason')}</p><p>Item: @{variables('varItemLink')}</p></div>",
+                      "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "HTTP_Set_Stopped_Invalid": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                },
+                "Terminate_Recommenders_Invalid": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Succeeded"
+                  },
+                  "runAfter": {
+                    "Email_Recommenders_Invalid": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Condition_Initial_Values_Failed": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_Applicant_Manager": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365users",
+                  "operationId": "Manager_V2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users"
+                },
+                "parameters": {
+                  "id": "@variables('varApplicantEmail')"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Condition_Recommenders_Invalid": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Condition_Manager_Mismatch": {
+              "type": "If",
+              "expression": {
+                "not": {
+                  "equals": [
+                    "@toLower(coalesce(body('Get_Applicant_Manager')?['mail'], 'none'))",
+                    "@toLower(variables('varSupEmail'))"
+                  ]
+                }
+              },
+              "actions": {
+                "Email_Manager_Mismatch": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@{variables('varReviewerEmail')}",
+                      "emailMessage/Subject": "FYI: Emerging Leaders supervisor differs from directory manager – @{variables('varApplicant')}",
+                      "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p><strong>@{variables('varApplicant')}</strong> named @{variables('varSupName')} as supervisor, but the directory lists @{coalesce(body('Get_Applicant_Manager')?['displayName'], 'no manager')}. The flow is continuing; this is for your awareness.</p><p>Item: @{variables('varItemLink')}</p></div>",
+                      "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Get_Applicant_Manager": [
+                  "Succeeded",
+                  "Failed"
+                ]
+              }
+            },
+            "Email_Applicant_Received": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
+                "parameters": {
+                  "emailMessage/To": "@{variables('varApplicantEmail')}",
+                  "emailMessage/Subject": "We received your Emerging Leaders Program application",
+                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>Hi @{variables('varApplicant')},</p><p>Thank you for applying. We've asked <strong>@{variables('varSupName')}</strong> and <strong>@{variables('varAlumName')}</strong> for their recommendations.</p><p>To keep applications confidential, you won't be able to view or edit your application after submitting. If you need to change anything, contact the program owner.</p></div>",
+                  "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Condition_Manager_Mismatch": [
+                  "Succeeded",
+                  "Failed"
+                ]
+              }
+            },
+            "Scope_Recommendations": {
+              "type": "Scope",
+              "actions": {
+                "Scope_Supervisor": {
+                  "type": "Scope",
+                  "actions": {
+                    "Create_Approval_Supervisor": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_approvals",
+                          "operationId": "CreateAnApproval",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals"
+                        },
+                        "parameters": {
+                          "approvalType": "CustomResponse",
+                          "ApprovalCreationInput/responseOptions": [
+                            "Submit recommendation"
+                          ],
+                          "ApprovalCreationInput/title": "Emerging Leaders Recommendation Request: @{variables('varApplicant')}",
+                          "ApprovalCreationInput/assignedTo": "@{variables('varSupEmail')}",
+                          "ApprovalCreationInput/details": "**@{variables('varApplicant')}** (@{triggerBody()?['Position']}) has applied to the Emerging Leaders Program and named you as their supervisor.\n\nYour recommendation goes only to the program owner and the Talent Development team. The applicant can't see it.\n\n**What interests you about the program?**\n@{triggerBody()?['Interest']}\n\n**What do you hope to gain from the program?**\n@{triggerBody()?['HopeToGain']}\n\n**How do you hope to apply your learning?**\n@{triggerBody()?['ApplyLearning']}\n\n**Do you currently (or have you in the past) served on a committee or team initiative?**\n@{triggerBody()?['CommitteeService']}\n\nPlease write your recommendation in the comments box, then select **Submit recommendation**.",
+                          "ApprovalCreationInput/enableNotifications": true,
+                          "ApprovalCreationInput/enableReassignment": false
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Do_Until_Sup_Responded": {
+                      "type": "Until",
+                      "expression": {
+                        "equals": [
+                          "@or(variables('varSupResponded'), greaterOrEquals(variables('varSupWaits'), 4))",
+                          true
+                        ]
+                      },
+                      "limit": {
+                        "count": 10,
+                        "timeout": "P15D"
+                      },
+                      "actions": {
+                        "Wait_Approval_Supervisor": {
+                          "type": "OpenApiConnectionWebhook",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_approvals",
+                              "operationId": "WaitForAnApproval",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals"
+                            },
+                            "parameters": {
+                              "approvalName": "@body('Create_Approval_Supervisor')?['name']"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "limit": {
+                            "timeout": "P3D"
+                          },
+                          "runAfter": {},
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "outputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Set_varSupComments": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varSupComments",
+                            "value": "@coalesce(first(body('Wait_Approval_Supervisor')?['responses'])?['comments'], '')"
+                          },
+                          "runAfter": {
+                            "Wait_Approval_Supervisor": [
+                              "Succeeded"
+                            ]
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Set_varSupOutcome": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varSupOutcome",
+                            "value": "@body('Wait_Approval_Supervisor')?['outcome']"
+                          },
+                          "runAfter": {
+                            "Set_varSupComments": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Set_varSupDate": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varSupDate",
+                            "value": "@first(body('Wait_Approval_Supervisor')?['responses'])?['responseDate']"
+                          },
+                          "runAfter": {
+                            "Set_varSupOutcome": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Set_varSupResponded": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varSupResponded",
+                            "value": true
+                          },
+                          "runAfter": {
+                            "Set_varSupDate": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Increment_varSupWaits": {
+                          "type": "IncrementVariable",
+                          "inputs": {
+                            "name": "varSupWaits",
+                            "value": 1
+                          },
+                          "runAfter": {
+                            "Wait_Approval_Supervisor": [
+                              "TimedOut"
+                            ]
+                          }
+                        },
+                        "Condition_Sup_Send_Reminder": {
+                          "type": "If",
+                          "expression": {
+                            "less": [
+                              "@variables('varSupWaits')",
+                              4
+                            ]
+                          },
+                          "actions": {
+                            "Email_Sup_Reminder": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_office365",
+                                  "operationId": "SendEmailV2",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                },
+                                "parameters": {
+                                  "emailMessage/To": "@{variables('varSupEmail')}",
+                                  "emailMessage/Subject": "Reminder: Emerging Leaders recommendation request for @{variables('varApplicant')}",
+                                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>Hi @{variables('varSupName')},</p><p>This is a reminder that you have a recommendation request for <strong>@{variables('varApplicant')}</strong>. You'll find it in the Approvals app in Teams, or in your Outlook email from <strong>Power Automate</strong>.</p><p>Your recommendation is confidential and goes only to the program owner.</p></div>",
+                                  "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}",
+                                  "emailMessage/Cc": "@if(equals(variables('varSupWaits'), 3), variables('varReviewerEmail'), '')"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "Increment_varSupWaits": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Create_Approval_Supervisor": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Condition_Sup_Responded": {
+                      "type": "If",
+                      "expression": {
+                        "equals": [
+                          "@variables('varSupResponded')",
+                          true
+                        ]
+                      },
+                      "actions": {
+                        "Compose_Sup_Received_Values": {
+                          "type": "Compose",
+                          "inputs": {
+                            "formValues": [
+                              {
+                                "FieldName": "Supervisor_x0020_Recommendation",
+                                "FieldValue": "@{variables('varSupComments')}"
+                              },
+                              {
+                                "FieldName": "Supervisor_x0020_Rec_x0020_Date",
+                                "FieldValue": "@{convertFromUtc(variables('varSupDate'), 'Eastern Standard Time', 'MM/dd/yyyy')}"
+                              },
+                              {
+                                "FieldName": "Supervisor_x0020_Status",
+                                "FieldValue": "Received"
+                              }
+                            ],
+                            "bNewDocumentUpdate": false
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {}
+                        },
+                        "HTTP_Set_Sup_Received": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata"
+                              },
+                              "parameters/body": "@outputs('Compose_Sup_Received_Values')"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Compose_Sup_Received_Values": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Condition_Sup_Write_Failed": {
+                          "type": "If",
+                          "expression": {
+                            "equals": [
+                              "@contains(string(body('HTTP_Set_Sup_Received')), '\"HasException\":true')",
+                              true
+                            ]
+                          },
+                          "actions": {
+                            "Email_Sup_Write_Failed": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_office365",
+                                  "operationId": "SendEmailV2",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                },
+                                "parameters": {
+                                  "emailMessage/To": "@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                                  "emailMessage/Subject": "ELP write-back failed: supervisor recommendation for @{variables('varApplicant')}",
+                                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>SharePoint returned HasException for the supervisor write-back. The approval response is in run history (secured).</p><p>Item: @{variables('varItemLink')}<br>Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p></div>"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "HTTP_Set_Sup_Received": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Condition_Sup_Blank_Comments": {
+                          "type": "If",
+                          "expression": {
+                            "equals": [
+                              "@empty(trim(variables('varSupComments')))",
+                              true
+                            ]
+                          },
+                          "actions": {
+                            "Email_Sup_Blank": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_office365",
+                                  "operationId": "SendEmailV2",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                },
+                                "parameters": {
+                                  "emailMessage/To": "@{variables('varReviewerEmail')}",
+                                  "emailMessage/Subject": "Emerging Leaders recommendation with no comments: @{variables('varApplicant')}",
+                                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>@{variables('varSupName')} submitted the supervisor recommendation for <strong>@{variables('varApplicant')}</strong> without comments. It was saved as Received.</p><p>Item: @{variables('varItemLink')}</p></div>",
+                                  "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "Condition_Sup_Write_Failed": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Compose_Sup_Timed_Out_Values": {
+                            "type": "Compose",
+                            "inputs": {
+                              "formValues": [
+                                {
+                                  "FieldName": "Supervisor_x0020_Status",
+                                  "FieldValue": "Timed Out"
+                                }
+                              ],
+                              "bNewDocumentUpdate": false
+                            },
+                            "runAfter": {}
+                          },
+                          "HTTP_Set_Sup_Timed_Out": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata",
+                                  "Content-Type": "application/json;odata=nometadata"
+                                },
+                                "parameters/body": "@outputs('Compose_Sup_Timed_Out_Values')"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "Compose_Sup_Timed_Out_Values": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Email_Sup_Timed_Out": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_office365",
+                                "operationId": "SendEmailV2",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                              },
+                              "parameters": {
+                                "emailMessage/To": "@{variables('varReviewerEmail')}",
+                                "emailMessage/Subject": "Emerging Leaders recommendation not received: @{variables('varApplicant')}",
+                                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>@{variables('varSupName')} did not respond to the supervisor recommendation request within 12 days. Status set to <strong>Timed Out</strong>.</p><p>A late response in the Approvals app won't be captured; add it to the item by hand if one arrives.</p><p>Item: @{variables('varItemLink')}</p></div>",
+                                "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "HTTP_Set_Sup_Timed_Out": [
+                                "Succeeded",
+                                "Failed"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Do_Until_Sup_Responded": [
+                          "Succeeded",
+                          "Failed",
+                          "TimedOut"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Condition_Sup_Scope_Failed": {
+                  "type": "If",
+                  "expression": {
+                    "equals": [
+                      "@contains(createArray('Failed', 'TimedOut'), actions('Scope_Supervisor')?['status'])",
+                      true
+                    ]
+                  },
+                  "actions": {
+                    "Compose_Sup_Error_Values": {
+                      "type": "Compose",
+                      "inputs": {
+                        "formValues": [
+                          {
+                            "FieldName": "Supervisor_x0020_Status",
+                            "FieldValue": "Error"
+                          }
+                        ],
+                        "bNewDocumentUpdate": false
+                      },
+                      "runAfter": {}
+                    },
+                    "HTTP_Set_Sup_Error": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata"
+                          },
+                          "parameters/body": "@outputs('Compose_Sup_Error_Values')"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Compose_Sup_Error_Values": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Email_Sup_Error": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_office365",
+                          "operationId": "SendEmailV2",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                        },
+                        "parameters": {
+                          "emailMessage/To": "@{variables('varReviewerEmail')};@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                          "emailMessage/Subject": "ELP supervisor branch failed: @{variables('varApplicant')}",
+                          "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>The supervisor recommendation branch failed (for example, a disabled or unknown account). Status set to <strong>Error</strong>; the application will be marked Incomplete.</p><p>Item: @{variables('varItemLink')}<br>Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p></div>"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "HTTP_Set_Sup_Error": [
+                          "Succeeded",
+                          "Failed"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Scope_Supervisor": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut",
+                      "Skipped"
+                    ]
+                  }
+                },
+                "Scope_Alumni": {
+                  "type": "Scope",
+                  "actions": {
+                    "Create_Approval_Alumni": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_approvals",
+                          "operationId": "CreateAnApproval",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals"
+                        },
+                        "parameters": {
+                          "approvalType": "CustomResponse",
+                          "ApprovalCreationInput/responseOptions": [
+                            "Submit recommendation"
+                          ],
+                          "ApprovalCreationInput/title": "Emerging Leaders Recommendation Request: @{variables('varApplicant')}",
+                          "ApprovalCreationInput/assignedTo": "@{variables('varAlumEmail')}",
+                          "ApprovalCreationInput/details": "**@{variables('varApplicant')}** (@{triggerBody()?['Position']}) has applied to the Emerging Leaders Program and named you as a program alumnus who can speak to their potential.\n\nYour recommendation goes only to the program owner and the Talent Development team. The applicant can't see it.\n\n**What interests you about the program?**\n@{triggerBody()?['Interest']}\n\n**What do you hope to gain from the program?**\n@{triggerBody()?['HopeToGain']}\n\n**How do you hope to apply your learning?**\n@{triggerBody()?['ApplyLearning']}\n\n**Do you currently (or have you in the past) served on a committee or team initiative?**\n@{triggerBody()?['CommitteeService']}\n\nPlease write your recommendation in the comments box, then select **Submit recommendation**.",
+                          "ApprovalCreationInput/enableNotifications": true,
+                          "ApprovalCreationInput/enableReassignment": false
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Do_Until_Alum_Responded": {
+                      "type": "Until",
+                      "expression": {
+                        "equals": [
+                          "@or(variables('varAlumResponded'), greaterOrEquals(variables('varAlumWaits'), 4))",
+                          true
+                        ]
+                      },
+                      "limit": {
+                        "count": 10,
+                        "timeout": "P15D"
+                      },
+                      "actions": {
+                        "Wait_Approval_Alumni": {
+                          "type": "OpenApiConnectionWebhook",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_approvals",
+                              "operationId": "WaitForAnApproval",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_approvals"
+                            },
+                            "parameters": {
+                              "approvalName": "@body('Create_Approval_Alumni')?['name']"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "limit": {
+                            "timeout": "P3D"
+                          },
+                          "runAfter": {},
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "outputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Set_varAlumComments": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varAlumComments",
+                            "value": "@coalesce(first(body('Wait_Approval_Alumni')?['responses'])?['comments'], '')"
+                          },
+                          "runAfter": {
+                            "Wait_Approval_Alumni": [
+                              "Succeeded"
+                            ]
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          }
+                        },
+                        "Set_varAlumOutcome": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varAlumOutcome",
+                            "value": "@body('Wait_Approval_Alumni')?['outcome']"
+                          },
+                          "runAfter": {
+                            "Set_varAlumComments": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Set_varAlumDate": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varAlumDate",
+                            "value": "@first(body('Wait_Approval_Alumni')?['responses'])?['responseDate']"
+                          },
+                          "runAfter": {
+                            "Set_varAlumOutcome": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Set_varAlumResponded": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varAlumResponded",
+                            "value": true
+                          },
+                          "runAfter": {
+                            "Set_varAlumDate": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Increment_varAlumWaits": {
+                          "type": "IncrementVariable",
+                          "inputs": {
+                            "name": "varAlumWaits",
+                            "value": 1
+                          },
+                          "runAfter": {
+                            "Wait_Approval_Alumni": [
+                              "TimedOut"
+                            ]
+                          }
+                        },
+                        "Condition_Alum_Send_Reminder": {
+                          "type": "If",
+                          "expression": {
+                            "less": [
+                              "@variables('varAlumWaits')",
+                              4
+                            ]
+                          },
+                          "actions": {
+                            "Email_Alum_Reminder": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_office365",
+                                  "operationId": "SendEmailV2",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                },
+                                "parameters": {
+                                  "emailMessage/To": "@{variables('varAlumEmail')}",
+                                  "emailMessage/Subject": "Reminder: Emerging Leaders recommendation request for @{variables('varApplicant')}",
+                                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>Hi @{variables('varAlumName')},</p><p>This is a reminder that you have a recommendation request for <strong>@{variables('varApplicant')}</strong>. You'll find it in the Approvals app in Teams, or in your Outlook email from <strong>Power Automate</strong>.</p><p>Your recommendation is confidential and goes only to the program owner.</p></div>",
+                                  "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}",
+                                  "emailMessage/Cc": "@if(equals(variables('varAlumWaits'), 3), variables('varReviewerEmail'), '')"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "Increment_varAlumWaits": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Create_Approval_Alumni": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Condition_Alum_Responded": {
+                      "type": "If",
+                      "expression": {
+                        "equals": [
+                          "@variables('varAlumResponded')",
+                          true
+                        ]
+                      },
+                      "actions": {
+                        "Compose_Alum_Received_Values": {
+                          "type": "Compose",
+                          "inputs": {
+                            "formValues": [
+                              {
+                                "FieldName": "Alumni_x0020_Recommendation",
+                                "FieldValue": "@{variables('varAlumComments')}"
+                              },
+                              {
+                                "FieldName": "Alumni_x0020_Rec_x0020_Date",
+                                "FieldValue": "@{convertFromUtc(variables('varAlumDate'), 'Eastern Standard Time', 'MM/dd/yyyy')}"
+                              },
+                              {
+                                "FieldName": "Alumni_x0020_Status",
+                                "FieldValue": "Received"
+                              }
+                            ],
+                            "bNewDocumentUpdate": false
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {}
+                        },
+                        "HTTP_Set_Alum_Received": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata"
+                              },
+                              "parameters/body": "@outputs('Compose_Alum_Received_Values')"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Compose_Alum_Received_Values": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Condition_Alum_Write_Failed": {
+                          "type": "If",
+                          "expression": {
+                            "equals": [
+                              "@contains(string(body('HTTP_Set_Alum_Received')), '\"HasException\":true')",
+                              true
+                            ]
+                          },
+                          "actions": {
+                            "Email_Alum_Write_Failed": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_office365",
+                                  "operationId": "SendEmailV2",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                },
+                                "parameters": {
+                                  "emailMessage/To": "@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                                  "emailMessage/Subject": "ELP write-back failed: program alumni recommendation for @{variables('varApplicant')}",
+                                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>SharePoint returned HasException for the program alumni write-back. The approval response is in run history (secured).</p><p>Item: @{variables('varItemLink')}<br>Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p></div>"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "HTTP_Set_Alum_Received": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Condition_Alum_Blank_Comments": {
+                          "type": "If",
+                          "expression": {
+                            "equals": [
+                              "@empty(trim(variables('varAlumComments')))",
+                              true
+                            ]
+                          },
+                          "actions": {
+                            "Email_Alum_Blank": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_office365",
+                                  "operationId": "SendEmailV2",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                },
+                                "parameters": {
+                                  "emailMessage/To": "@{variables('varReviewerEmail')}",
+                                  "emailMessage/Subject": "Emerging Leaders recommendation with no comments: @{variables('varApplicant')}",
+                                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>@{variables('varAlumName')} submitted the program alumni recommendation for <strong>@{variables('varApplicant')}</strong> without comments. It was saved as Received.</p><p>Item: @{variables('varItemLink')}</p></div>",
+                                  "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "Condition_Alum_Write_Failed": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Compose_Alum_Timed_Out_Values": {
+                            "type": "Compose",
+                            "inputs": {
+                              "formValues": [
+                                {
+                                  "FieldName": "Alumni_x0020_Status",
+                                  "FieldValue": "Timed Out"
+                                }
+                              ],
+                              "bNewDocumentUpdate": false
+                            },
+                            "runAfter": {}
+                          },
+                          "HTTP_Set_Alum_Timed_Out": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata",
+                                  "Content-Type": "application/json;odata=nometadata"
+                                },
+                                "parameters/body": "@outputs('Compose_Alum_Timed_Out_Values')"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "Compose_Alum_Timed_Out_Values": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Email_Alum_Timed_Out": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_office365",
+                                "operationId": "SendEmailV2",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                              },
+                              "parameters": {
+                                "emailMessage/To": "@{variables('varReviewerEmail')}",
+                                "emailMessage/Subject": "Emerging Leaders recommendation not received: @{variables('varApplicant')}",
+                                "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>@{variables('varAlumName')} did not respond to the program alumni recommendation request within 12 days. Status set to <strong>Timed Out</strong>.</p><p>A late response in the Approvals app won't be captured; add it to the item by hand if one arrives.</p><p>Item: @{variables('varItemLink')}</p></div>",
+                                "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "HTTP_Set_Alum_Timed_Out": [
+                                "Succeeded",
+                                "Failed"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Do_Until_Alum_Responded": [
+                          "Succeeded",
+                          "Failed",
+                          "TimedOut"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Condition_Alum_Scope_Failed": {
+                  "type": "If",
+                  "expression": {
+                    "equals": [
+                      "@contains(createArray('Failed', 'TimedOut'), actions('Scope_Alumni')?['status'])",
+                      true
+                    ]
+                  },
+                  "actions": {
+                    "Compose_Alum_Error_Values": {
+                      "type": "Compose",
+                      "inputs": {
+                        "formValues": [
+                          {
+                            "FieldName": "Alumni_x0020_Status",
+                            "FieldValue": "Error"
+                          }
+                        ],
+                        "bNewDocumentUpdate": false
+                      },
+                      "runAfter": {}
+                    },
+                    "HTTP_Set_Alum_Error": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata"
+                          },
+                          "parameters/body": "@outputs('Compose_Alum_Error_Values')"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Compose_Alum_Error_Values": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Email_Alum_Error": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_office365",
+                          "operationId": "SendEmailV2",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                        },
+                        "parameters": {
+                          "emailMessage/To": "@{variables('varReviewerEmail')};@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                          "emailMessage/Subject": "ELP program alumni branch failed: @{variables('varApplicant')}",
+                          "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>The program alumni recommendation branch failed (for example, a disabled or unknown account). Status set to <strong>Error</strong>; the application will be marked Incomplete.</p><p>Item: @{variables('varItemLink')}<br>Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p></div>"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "HTTP_Set_Alum_Error": [
+                          "Succeeded",
+                          "Failed"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Scope_Alumni": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut",
+                      "Skipped"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Email_Applicant_Received": [
+                  "Succeeded",
+                  "Failed"
+                ]
+              }
+            },
+            "Get_Item_Final_Status": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "GetItem",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                  "table": "@parameters('ELP Application List (plb_ElpApplicationList)')",
+                  "id": "@triggerBody()?['ID']"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Scope_Recommendations": [
+                  "Succeeded",
+                  "Failed",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Condition_Both_Received": {
+              "type": "If",
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@body('Get_Item_Final_Status')?['Supervisor_x0020_Status']?['Value']",
+                      "Received"
+                    ]
+                  },
+                  {
+                    "equals": [
+                      "@body('Get_Item_Final_Status')?['Alumni_x0020_Status']?['Value']",
+                      "Received"
+                    ]
+                  }
+                ]
+              },
+              "actions": {
+                "Compose_Complete_Values": {
+                  "type": "Compose",
+                  "inputs": {
+                    "formValues": [
+                      {
+                        "FieldName": "Application_x0020_Status",
+                        "FieldValue": "Complete"
+                      }
+                    ],
+                    "bNewDocumentUpdate": false
+                  },
+                  "runAfter": {}
+                },
+                "HTTP_Set_Complete": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      },
+                      "parameters/body": "@outputs('Compose_Complete_Values')"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Compose_Complete_Values": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Email_Complete_Reviewer": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@{variables('varReviewerEmail')}",
+                      "emailMessage/Subject": "Emerging Leaders application complete: @{variables('varApplicant')}",
+                      "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>Both recommendations for <strong>@{variables('varApplicant')}</strong> are in. They're saved on the locked item (not included in this email).</p><p>Item: @{variables('varItemLink')}</p></div>",
+                      "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "HTTP_Set_Complete": [
+                      "Succeeded",
+                      "Failed"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Compose_Incomplete_Values": {
+                    "type": "Compose",
+                    "inputs": {
+                      "formValues": [
+                        {
+                          "FieldName": "Application_x0020_Status",
+                          "FieldValue": "Incomplete"
+                        }
+                      ],
+                      "bNewDocumentUpdate": false
+                    },
+                    "runAfter": {}
+                  },
+                  "HTTP_Set_Incomplete": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "HttpRequest",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@parameters('Talent Site URL (plb_TalentSiteUrl)')",
+                        "parameters/method": "POST",
+                        "parameters/uri": "_api/web/lists(guid'@{parameters('ELP Application List (plb_ElpApplicationList)')}')/items(@{triggerBody()?['ID']})/ValidateUpdateListItem",
+                        "parameters/headers": {
+                          "Accept": "application/json;odata=nometadata",
+                          "Content-Type": "application/json;odata=nometadata"
+                        },
+                        "parameters/body": "@outputs('Compose_Incomplete_Values')"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runAfter": {
+                      "Compose_Incomplete_Values": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Email_Incomplete_Reviewer": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_office365",
+                        "operationId": "SendEmailV2",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                      },
+                      "parameters": {
+                        "emailMessage/To": "@{variables('varReviewerEmail')}",
+                        "emailMessage/Subject": "Emerging Leaders application incomplete: @{variables('varApplicant')}",
+                        "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>The application from <strong>@{variables('varApplicant')}</strong> is missing a recommendation.</p><p>Supervisor: @{body('Get_Item_Final_Status')?['Supervisor_x0020_Status']?['Value']}<br>Program alumni: @{body('Get_Item_Final_Status')?['Alumni_x0020_Status']?['Value']}</p><p>A status of Pending means IT has the details from a failed write-back.</p><p>Item: @{variables('varItemLink')}</p></div>",
+                        "emailMessage/From": "@{parameters('ELP Sender Mailbox (plb_ElpSenderMailbox)')}"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runAfter": {
+                      "HTTP_Set_Incomplete": [
+                        "Succeeded",
+                        "Failed"
+                      ]
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Get_Item_Final_Status": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_varReviewerEmail": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Scope_Catch": {
+          "type": "Scope",
+          "actions": {
+            "Email_Flow_Error": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
+                "parameters": {
+                  "emailMessage/To": "@{parameters('TechOps Email (plb_TechOpsEmail)')}",
+                  "emailMessage/Subject": "ELP application flow error for @{variables('varApplicant')}",
+                  "emailMessage/Body": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:14px;\"><p>The Emerging Leaders flow hit an unhandled error.</p><p>Item: @{variables('varItemLink')}<br>Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p></div>",
+                  "emailMessage/Importance": "High"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            },
+            "Terminate_Flow_Error": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "UnhandledError",
+                  "message": "See run history."
+                }
+              },
+              "runAfter": {
+                "Email_Flow_Error": [
+                  "Succeeded",
+                  "Failed"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Scope_Try": [
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    },
+    "templateName": ""
+  },
+  "schemaVersion": "1.0.0.0"
+}

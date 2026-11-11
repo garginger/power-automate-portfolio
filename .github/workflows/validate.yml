@@ -1,0 +1,58 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      # Optional: add a repository secret named SANITIZE_DENYLIST (one regex per line)
+      # to enforce private terms without committing them.
+      SANITIZE_DENYLIST: ${{ secrets.SANITIZE_DENYLIST }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Every JSON file parses
+        run: |
+          python - <<'EOF'
+          import json, pathlib, sys
+          bad = 0
+          for p in sorted(pathlib.Path('.').rglob('*.json')):
+              if '.git' in p.parts:
+                  continue
+              try:
+                  json.loads(p.read_text())
+              except Exception as e:
+                  print(f'{p}: {e}')
+                  bad += 1
+          print(f'{"FAIL" if bad else "ok"}: {bad} invalid file(s)')
+          sys.exit(1 if bad else 0)
+          EOF
+
+      - name: Structural checks (runAfter, references, variables, env vars)
+        run: python scripts/validate_definitions.py
+
+      - name: Sanitization (generic rules)
+        run: python scripts/check_sanitization.py .
+
+      - name: Sanitization (private rules)
+        if: env.SANITIZE_DENYLIST != ''
+        run: |
+          printf '%s\n' "$SANITIZE_DENYLIST" > "$RUNNER_TEMP/denylist.txt"
+          python scripts/check_sanitization.py --denylist "$RUNNER_TEMP/denylist.txt" .
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
