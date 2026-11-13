@@ -42,3 +42,10 @@ Raw solution exports (`*.zip`, `exports/`) are gitignored. The workflow is:
 1. Export the solution (Unmanaged) into `exports/` and unpack it there.
 2. Copy a workflow JSON into its flow folder and replace identifiers with environment variables.
 3. Run `validate_definitions.py` and `check_sanitization.py --denylist ...`. Both must pass before commit.
+
+A real export carries more than the workflow JSON. [Email Due Dates](../flows/email-due-date-extractor/) was the first flow sanitized from one, and these needed attention too:
+
+- **Connection reference display names** can carry the names of other flows.
+- **An AI prompt's saved test values** can hold real names and addresses.
+- **The solution and customizations files** hold the publisher, its description and component IDs. They aren't published here.
+- **Designer metadata IDs** on triggers and actions trip the GUID rule.
