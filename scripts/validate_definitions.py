@@ -112,9 +112,13 @@ def check(path):
                 yield from walk(a["actions"])
             if "else" in a:
                 yield from walk(a["else"].get("actions", {}))
+            for case in a.get("cases", {}).values():
+                yield from walk(case.get("actions", {}))
+            if "default" in a:
+                yield from walk(a["default"].get("actions", {}))
 
     for name, a in walk(actions):
-        own = {k: v for k, v in a.items() if k not in ("actions", "else")}
+        own = {k: v for k, v in a.items() if k not in ("actions", "else", "cases", "default")}
         for s in strings(own):
             for kind, ref in REF.findall(s):
                 if kind == "items" and ref not in foreach_names:

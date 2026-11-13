@@ -4,6 +4,8 @@
 
 Production flows are owned by a dedicated **automation service account**, with the builder as co-owner. That avoids key-person risk: flows don't break, and the audit trail doesn't blur, when a person changes roles or leaves. Every connection reference points at the service account's connections.
 
+**The exception is a flow that acts on one person's own mailbox.** [Email Due Dates](../flows/email-due-date-extractor/) calls Graph `/me`, so it has to run under that person's connections. Its references carry a `mailboxowner` suffix so they can't be mistaken for the service account's, and the builder stays a co-owner.
+
 ## Environment variables
 
 Nothing tenant-specific is hard-coded in a definition. Site URLs, list IDs, group IDs and mailboxes are **solution environment variables**, and definitions reference them as parameters:
@@ -33,6 +35,10 @@ The `plb_` prefix is the solution publisher's prefix. Each flow's README lists t
 | `plb_sharedoffice365users_automation` | Office 365 Users |
 | `plb_sharedapprovals_automation` | Approvals |
 | `plb_sharedoffice365groups_automation` | Office 365 Groups |
+| `plb_sharedoffice365_mailboxowner` | Office 365 Outlook, as the mailbox owner |
+| `plb_sharedsharepointonline_mailboxowner` | SharePoint, as the mailbox owner |
+| `plb_sharedteams_mailboxowner` | Microsoft Teams, as the mailbox owner |
+| `plb_sharedcommondataserviceforapps_mailboxowner` | Microsoft Dataverse, which AI Builder's Run a prompt uses |
 
 ## Deployment settings
 

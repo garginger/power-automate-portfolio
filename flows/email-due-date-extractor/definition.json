@@ -1,0 +1,1433 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedsharepointonline_mailboxowner"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedoffice365_mailboxowner"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      },
+      "shared_teams": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedteams_mailboxowner"
+        },
+        "api": {
+          "name": "shared_teams"
+        }
+      },
+      "shared_commondataserviceforapps": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "plb_sharedcommondataserviceforapps_mailboxowner"
+        },
+        "api": {
+          "name": "shared_commondataserviceforapps"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "EDD Site URL (plb_EddSiteUrl)": {
+          "defaultValue": "https://contoso.sharepoint.com/sites/EmailDueDates",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_EddSiteUrl",
+            "description": "SharePoint site that hosts the three EDD lists. Inheritance is broken on each list, so only the mailbox owner and the builder can open them."
+          }
+        },
+        "EDD Config List (plb_EddConfigList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_EddConfigList",
+            "description": "List ID (GUID) of EDD Config: one row of settings plus the watermark."
+          }
+        },
+        "EDD Action Items List (plb_EddActionItemsList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_EddActionItemsList",
+            "description": "List ID (GUID) of EDD Action Items: the ledger the dedupe checks read."
+          }
+        },
+        "EDD Sender Rules List (plb_EddSenderRulesList)": {
+          "defaultValue": "00000000-0000-0000-0000-000000000000",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_EddSenderRulesList",
+            "description": "List ID (GUID) of EDD Sender Rules: Always / Never rows per address or domain."
+          }
+        },
+        "EDD Alert Recipient (plb_EddAlertRecipient)": {
+          "defaultValue": "flowbuilder@contoso.com",
+          "type": "String",
+          "metadata": {
+            "schemaName": "plb_EddAlertRecipient",
+            "description": "Teams user who gets failure and skipped-thread alerts (the builder). Deliberately not read from the Config list, so the alert still sends when Get Config is the action that failed."
+          }
+        }
+      },
+      "triggers": {
+        "Recurrence": {
+          "recurrence": {
+            "frequency": "Week",
+            "interval": 1,
+            "timeZone": "Eastern Standard Time",
+            "startTime": "2026-11-13T12:00:00Z",
+            "schedule": {
+              "weekDays": [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday"
+              ],
+              "hours": [
+                "7",
+                "16"
+              ],
+              "minutes": [
+                5
+              ]
+            }
+          },
+          "type": "Recurrence"
+        }
+      },
+      "actions": {
+        "Init_RunStart": {
+          "runAfter": {},
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varRunStartUtc",
+                "type": "string",
+                "value": "@{utcNow('yyyy-MM-ddTHH:mm:ssZ')}"
+              }
+            ]
+          }
+        },
+        "Init_Today": {
+          "runAfter": {
+            "Init_RunStart": [
+              "Succeeded"
+            ]
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varToday",
+                "type": "string",
+                "value": "@convertFromUtc(utcNow(), 'Eastern Standard Time', 'yyyy-MM-dd')"
+              }
+            ]
+          }
+        },
+        "Init_Created": {
+          "runAfter": {
+            "Init_Today": [
+              "Succeeded"
+            ]
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varCreated",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "Init_Updated": {
+          "runAfter": {
+            "Init_Created": [
+              "Succeeded"
+            ]
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varUpdated",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "Init_Maybe": {
+          "runAfter": {
+            "Init_Updated": [
+              "Succeeded"
+            ]
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varMaybe",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "Init_Reminder": {
+          "runAfter": {
+            "Init_Maybe": [
+              "Succeeded"
+            ]
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varReminderMinutes",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "Init_Skipped": {
+          "runAfter": {
+            "Init_Reminder": [
+              "Succeeded"
+            ]
+          },
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSkipped",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "Try": {
+          "actions": {
+            "Get_Config": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                  "table": "@parameters('EDD Config List (plb_EddConfigList)')",
+                  "id": 1
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "operationId": "GetItem",
+                  "connectionName": "shared_sharepointonline"
+                }
+              }
+            },
+            "Get_Sender_Rules": {
+              "runAfter": {
+                "Get_Config": [
+                  "Succeeded"
+                ]
+              },
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                  "table": "@parameters('EDD Sender Rules List (plb_EddSenderRulesList)')",
+                  "$top": 500
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "operationId": "GetItems",
+                  "connectionName": "shared_sharepointonline"
+                }
+              }
+            },
+            "Filter_Never_Rules": {
+              "runAfter": {
+                "Get_Sender_Rules": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_Sender_Rules')?['value']",
+                "where": "@equals(item()?['Rule']?['Value'], 'Never')"
+              }
+            },
+            "Select_Never_Senders": {
+              "runAfter": {
+                "Filter_Never_Rules": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Filter_Never_Rules')",
+                "select": "@toLower(trim(item()?['Title']))"
+              }
+            },
+            "Filter_Always_Rules": {
+              "runAfter": {
+                "Select_Never_Senders": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_Sender_Rules')?['value']",
+                "where": "@equals(item()?['Rule']?['Value'], 'Always')"
+              }
+            },
+            "Select_Always_Senders": {
+              "runAfter": {
+                "Filter_Always_Rules": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Filter_Always_Rules')",
+                "select": "@toLower(trim(item()?['Title']))"
+              }
+            },
+            "Always_Senders_Text": {
+              "runAfter": {
+                "Select_Always_Senders": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Compose",
+              "inputs": "@if(empty(body('Select_Always_Senders')), 'None', join(body('Select_Always_Senders'), ', '))"
+            },
+            "Get_New_Inbox_Mail": {
+              "runAfter": {
+                "Always_Senders_Text": [
+                  "Succeeded"
+                ]
+              },
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$filter=', encodeUriComponent(concat('receivedDateTime ge ', formatDateTime(body('Get_Config')?['LastRunUtc'], 'yyyy-MM-ddTHH:mm:ssZ'))), '&$select=id,conversationId,subject,from,receivedDateTime&$top=500')",
+                  "Method": "GET"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "operationId": "HttpRequest",
+                  "connectionName": "shared_office365"
+                }
+              }
+            },
+            "Get_New_Sent_Mail": {
+              "runAfter": {
+                "Get_New_Inbox_Mail": [
+                  "Succeeded"
+                ]
+              },
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages?$filter=', encodeUriComponent(concat('sentDateTime ge ', formatDateTime(body('Get_Config')?['LastRunUtc'], 'yyyy-MM-ddTHH:mm:ssZ'))), '&$select=id,conversationId,subject,from,receivedDateTime&$top=500')",
+                  "Method": "GET",
+                  "ContentType": "application/json"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                  "operationId": "HttpRequest",
+                  "connectionName": "shared_office365"
+                }
+              }
+            },
+            "All_New_Mail": {
+              "runAfter": {
+                "Get_New_Sent_Mail": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Compose",
+              "inputs": "@union(body('Get_New_Inbox_Mail')?['value'], body('Get_New_Sent_Mail')?['value'])"
+            },
+            "Filter_Out_Noise": {
+              "runAfter": {
+                "All_New_Mail": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Query",
+              "inputs": {
+                "from": "@outputs('All_New_Mail')",
+                "where": "@or(contains(body('Select_Always_Senders'), toLower(string(item()?['from']?['emailAddress']?['address']))), contains(body('Select_Always_Senders'), toLower(last(split(string(item()?['from']?['emailAddress']?['address']), '@')))), and(not(startsWith(string(item()?['@odata.type']), '#microsoft.graph.eventMessage')), not(startsWith(toLower(string(item()?['subject'])), 'automatic reply')), not(contains(toLower(string(item()?['from']?['emailAddress']?['address'])), 'noreply')), not(contains(toLower(string(item()?['from']?['emailAddress']?['address'])), 'no-reply')), not(contains(body('Select_Never_Senders'), toLower(string(item()?['from']?['emailAddress']?['address'])))), not(contains(body('Select_Never_Senders'), toLower(last(split(string(item()?['from']?['emailAddress']?['address']), '@')))))))"
+              }
+            },
+            "Select_Conversation_Ids": {
+              "runAfter": {
+                "Filter_Out_Noise": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Filter_Out_Noise')",
+                "select": "@item()?['conversationId']"
+              }
+            },
+            "Distinct_Threads": {
+              "runAfter": {
+                "Select_Conversation_Ids": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Compose",
+              "inputs": "@union(body('Select_Conversation_Ids'), body('Select_Conversation_Ids'))"
+            },
+            "For_Each_Thread": {
+              "foreach": "@outputs('Distinct_Threads')",
+              "actions": {
+                "Thread_Try": {
+                  "actions": {
+                    "Get_Thread_Messages": {
+                      "runAfter": {
+                        "Other_Open_Items_Text": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "Uri": "@concat('https://graph.microsoft.com/v1.0/me/messages?$filter=', encodeUriComponent(concat('conversationId eq ''', items('For_Each_Thread'), '''')), '&$select=id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,uniqueBody,webLink&$top=50')",
+                          "Method": "GET",
+                          "CustomHeader1": "Prefer: outlook.body-content-type=\"text\"",
+                          "ContentType": "application/json"
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                          "operationId": "HttpRequest",
+                          "connectionName": "shared_office365"
+                        }
+                      }
+                    },
+                    "Latest_Thread_Messages": {
+                      "runAfter": {
+                        "Get_Thread_Messages": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Compose",
+                      "inputs": "@reverse(take(reverse(sort(body('Get_Thread_Messages')?['value'], 'receivedDateTime')), 8))"
+                    },
+                    "Select_Thread_Lines": {
+                      "runAfter": {
+                        "Latest_Thread_Messages": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@outputs('Latest_Thread_Messages')",
+                        "select": "@concat('--- Sent ', convertFromUtc(item()?['receivedDateTime'], 'Eastern Standard Time', 'dddd, MMMM d, yyyy h:mm tt'), ' | From: ', item()?['from']?['emailAddress']?['name'], ' <', item()?['from']?['emailAddress']?['address'], '> | To: ', string(item()?['toRecipients']), ' | Cc: ', string(item()?['ccRecipients']), ' | Subject: ', item()?['subject'], decodeUriComponent('%0A'), take(string(item()?['uniqueBody']?['content']), 3000))"
+                      }
+                    },
+                    "Thread_Text": {
+                      "runAfter": {
+                        "Select_Thread_Lines": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Compose",
+                      "inputs": "@if(greater(length(join(body('Select_Thread_Lines'), decodeUriComponent('%0A%0A'))), 20000), substring(join(body('Select_Thread_Lines'), decodeUriComponent('%0A%0A')), sub(length(join(body('Select_Thread_Lines'), decodeUriComponent('%0A%0A'))), 20000), 20000), join(body('Select_Thread_Lines'), decodeUriComponent('%0A%0A')))"
+                    },
+                    "Source_Link": {
+                      "runAfter": {
+                        "Thread_Text": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Compose",
+                      "inputs": "@last(outputs('Latest_Thread_Messages'))?['webLink']"
+                    },
+                    "Get_Thread_Items": {
+                      "runAfter": {
+                        "Source_Link": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                          "table": "@parameters('EDD Action Items List (plb_EddActionItemsList)')",
+                          "$filter": "ConversationId eq '@{items('For_Each_Thread')}'",
+                          "$top": 50
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "operationId": "GetItems",
+                          "connectionName": "shared_sharepointonline"
+                        }
+                      }
+                    },
+                    "Select_Thread_Items": {
+                      "runAfter": {
+                        "Get_Thread_Items": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@body('Get_Thread_Items')?['value']",
+                        "select": "@concat('ID ', item()?['ID'], ': ', item()?['Title'], ' | due ', coalesce(item()?['DueDate'], 'none'), ' | status ', item()?['Status']?['Value'])"
+                      }
+                    },
+                    "Thread_Items_Text": {
+                      "runAfter": {
+                        "Select_Thread_Items": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Compose",
+                      "inputs": "@if(empty(body('Select_Thread_Items')), 'None', join(body('Select_Thread_Items'), decodeUriComponent('%0A')))"
+                    },
+                    "Extract_Action_Items": {
+                      "runAfter": {
+                        "Thread_Items_Text": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "recordId": "00000000-0000-0000-0000-000000000000",
+                          "item/requestv2/ThreadText": "@outputs('Thread_Text')",
+                          "item/requestv2/ThreadItems": "@outputs('Thread_Items_Text')",
+                          "item/requestv2/OwnerProfile": "@outputs('Owner_Profile')",
+                          "item/requestv2/AlwaysSenders": "@outputs('Always_Senders_Text')",
+                          "item/requestv2/OtherOpenItems": "@outputs('Other_Open_Items_Text')",
+                          "item/requestv2/Today": "@concat(convertFromUtc(utcNow(), 'Eastern Standard Time', 'dddd, MMMM d, yyyy'), ' (', variables('varToday'), ')')"
+                        },
+                        "host": {
+                          "apiId": "providers/Microsoft.ProcessSimple/operationGroups/aibuilder",
+                          "operationId": "aibuilderpredict_customprompt",
+                          "connectionName": "shared_commondataserviceforapps"
+                        }
+                      }
+                    },
+                    "Clean_AI_Output": {
+                      "runAfter": {
+                        "Extract_Action_Items": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Compose",
+                      "inputs": "@trim(replace(replace(string(outputs('Extract_Action_Items')?['body/responsev2/predictionOutput/text']), '```json', ''), '```', ''))"
+                    },
+                    "Parse_AI_Items": {
+                      "runAfter": {
+                        "Clean_AI_Output": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "ParseJson",
+                      "inputs": {
+                        "content": "@outputs('Clean_AI_Output')",
+                        "schema": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "action": {
+                                    "type": "string"
+                                  },
+                                  "existingItemId": {
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ]
+                                  },
+                                  "title": {
+                                    "type": "string"
+                                  },
+                                  "dueDate": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "dueTime": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "size": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "confidence": {
+                                    "type": "number"
+                                  },
+                                  "ownerReason": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "evidence": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "action",
+                                  "title"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "items"
+                          ]
+                        }
+                      }
+                    },
+                    "Get_Open_Items": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "parameters": {
+                          "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                          "table": "@parameters('EDD Action Items List (plb_EddActionItemsList)')",
+                          "$filter": "Status eq 'Active'",
+                          "$top": 500
+                        },
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                          "operationId": "GetItems",
+                          "connectionName": "shared_sharepointonline"
+                        }
+                      }
+                    },
+                    "Filter_Upcoming_Items": {
+                      "runAfter": {
+                        "Get_Open_Items": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Get_Open_Items')?['value']",
+                        "where": "@greaterOrEquals(string(item()?['DueDate']), variables('varToday'))"
+                      }
+                    },
+                    "Select_Other_Open_Items": {
+                      "runAfter": {
+                        "Filter_Upcoming_Items": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@body('Filter_Upcoming_Items')",
+                        "select": "@concat('ID ', item()?['ID'], ': ', item()?['Title'], ' | due ', item()?['DueDate'])"
+                      }
+                    },
+                    "Other_Open_Items_Text": {
+                      "runAfter": {
+                        "Select_Other_Open_Items": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Compose",
+                      "inputs": "@if(empty(body('Select_Other_Open_Items')), 'None', join(body('Select_Other_Open_Items'), decodeUriComponent('%0A')))"
+                    },
+                    "For_Each_Item": {
+                      "foreach": "@body('Parse_AI_Items')?['items']",
+                      "actions": {
+                        "Set_Reminder": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varReminderMinutes",
+                            "value": "@if(equals(toLower(coalesce(items('For_Each_Item')?['size'], 'small')), 'big'), int(body('Get_Config')?['ReminderBigMinutes']), int(body('Get_Config')?['ReminderSmallMinutes']))"
+                          }
+                        },
+                        "Item_Title_Safe": {
+                          "runAfter": {
+                            "Set_Reminder": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Compose",
+                          "inputs": "@take(replace(replace(replace(replace(replace(trim(items('For_Each_Item')?['title']), '\"', ''''), '\\', '/'), decodeUriComponent('%0A'), ' '), decodeUriComponent('%0D'), ' '), decodeUriComponent('%09'), ' '), 120)"
+                        },
+                        "Item_Evidence_Safe": {
+                          "runAfter": {
+                            "Item_Title_Safe": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Compose",
+                          "inputs": "@take(replace(replace(replace(replace(replace(coalesce(items('For_Each_Item')?['evidence'], ''), '\"', ''''), '\\', '/'), decodeUriComponent('%0A'), ' '), decodeUriComponent('%0D'), ' '), decodeUriComponent('%09'), ' '), 200)"
+                        },
+                        "Item_Due_Date": {
+                          "runAfter": {
+                            "Item_Evidence_Safe": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Compose",
+                          "inputs": "@coalesce(items('For_Each_Item')?['dueDate'], '')"
+                        },
+                        "Item_Due_Time": {
+                          "runAfter": {
+                            "Item_Due_Date": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Compose",
+                          "inputs": "@coalesce(items('For_Each_Item')?['dueTime'], '')"
+                        },
+                        "Dedupe_Key": {
+                          "runAfter": {
+                            "Item_Due_Time": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Compose",
+                          "inputs": "@toLower(concat(outputs('Item_Due_Date'), '|', take(replace(replace(replace(replace(outputs('Item_Title_Safe'), ' ', ''), '''', ''), '.', ''), ',', ''), 30)))"
+                        },
+                        "Anchor_DateTime": {
+                          "runAfter": {
+                            "Dedupe_Key": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Compose",
+                          "inputs": "@concat(if(empty(outputs('Item_Due_Date')), '2000-01-01', outputs('Item_Due_Date')), 'T', if(empty(outputs('Item_Due_Time')), body('Get_Config')?['DefaultEventTime'], outputs('Item_Due_Time')), ':00')"
+                        },
+                        "Event_Start": {
+                          "runAfter": {
+                            "Anchor_DateTime": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Compose",
+                          "inputs": "@if(empty(outputs('Item_Due_Time')), outputs('Anchor_DateTime'), formatDateTime(addMinutes(outputs('Anchor_DateTime'), -30), 'yyyy-MM-ddTHH:mm:ss'))"
+                        },
+                        "Event_End": {
+                          "runAfter": {
+                            "Event_Start": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Compose",
+                          "inputs": "@if(empty(outputs('Item_Due_Time')), formatDateTime(addMinutes(outputs('Anchor_DateTime'), 15), 'yyyy-MM-ddTHH:mm:ss'), outputs('Anchor_DateTime'))"
+                        },
+                        "Is_Confident": {
+                          "runAfter": {
+                            "Event_End": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Compose",
+                          "inputs": "@and(not(empty(outputs('Item_Due_Date'))), greaterOrEquals(float(coalesce(items('For_Each_Item')?['confidence'], 0)), float(body('Get_Config')?['ConfidenceThreshold'])))"
+                        },
+                        "Event_Payload": {
+                          "runAfter": {
+                            "Is_Confident": [
+                              "Succeeded"
+                            ]
+                          },
+                          "type": "Compose",
+                          "inputs": {
+                            "subject": "Due: @{outputs('Item_Title_Safe')}",
+                            "body": {
+                              "contentType": "HTML",
+                              "content": "<p>Added automatically from your email.</p><p><b>Why:</b> @{outputs('Item_Evidence_Safe')}</p><p><a href='@{outputs('Source_Link')}'>Open the email thread</a></p>"
+                            },
+                            "start": {
+                              "dateTime": "@{outputs('Event_Start')}",
+                              "timeZone": "Eastern Standard Time"
+                            },
+                            "end": {
+                              "dateTime": "@{outputs('Event_End')}",
+                              "timeZone": "Eastern Standard Time"
+                            },
+                            "showAs": "free",
+                            "isReminderOn": true,
+                            "reminderMinutesBeforeStart": "@variables('varReminderMinutes')",
+                            "categories": [
+                              "@{body('Get_Config')?['EventCategory']}"
+                            ]
+                          }
+                        },
+                        "Switch_Action": {
+                          "runAfter": {
+                            "Event_Payload": [
+                              "Succeeded"
+                            ]
+                          },
+                          "cases": {
+                            "Case_create": {
+                              "case": "create",
+                              "actions": {
+                                "Find_Duplicate": {
+                                  "type": "OpenApiConnection",
+                                  "inputs": {
+                                    "parameters": {
+                                      "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                                      "table": "@parameters('EDD Action Items List (plb_EddActionItemsList)')",
+                                      "$filter": "DedupeKey eq '@{outputs('Dedupe_Key')}'",
+                                      "$top": 1
+                                    },
+                                    "host": {
+                                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                      "operationId": "GetItems",
+                                      "connectionName": "shared_sharepointonline"
+                                    }
+                                  }
+                                },
+                                "Is_New": {
+                                  "actions": {
+                                    "Confident_and_Dated": {
+                                      "actions": {
+                                        "Create_Calendar_Event": {
+                                          "type": "OpenApiConnection",
+                                          "inputs": {
+                                            "parameters": {
+                                              "Uri": "@if(empty(trim(coalesce(body('Get_Config')?['CalendarId'], ''))), 'https://graph.microsoft.com/v1.0/me/events', concat('https://graph.microsoft.com/v1.0/me/calendars/', trim(body('Get_Config')?['CalendarId']), '/events'))",
+                                              "Method": "POST",
+                                              "Body": "@outputs('Event_Payload')",
+                                              "ContentType": "application/json"
+                                            },
+                                            "host": {
+                                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                                              "operationId": "HttpRequest",
+                                              "connectionName": "shared_office365"
+                                            }
+                                          }
+                                        },
+                                        "Log_Created": {
+                                          "runAfter": {
+                                            "Create_Calendar_Event": [
+                                              "Succeeded"
+                                            ]
+                                          },
+                                          "type": "OpenApiConnection",
+                                          "inputs": {
+                                            "parameters": {
+                                              "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                                              "table": "@parameters('EDD Action Items List (plb_EddActionItemsList)')",
+                                              "item/Title": "@outputs('Item_Title_Safe')",
+                                              "item/DueDate": "@outputs('Item_Due_Date')",
+                                              "item/DueTime": "@outputs('Item_Due_Time')",
+                                              "item/Size/Value": "@if(equals(toLower(coalesce(items('For_Each_Item')?['size'], 'small')), 'big'), 'Big', 'Small')",
+                                              "item/Status/Value": "Active",
+                                              "item/LastAction/Value": "Created",
+                                              "item/ConversationId": "@items('For_Each_Thread')",
+                                              "item/DedupeKey": "@outputs('Dedupe_Key')",
+                                              "item/EventId": "@body('Create_Calendar_Event')?['id']",
+                                              "item/SourceLink": "@outputs('Source_Link')",
+                                              "item/Confidence": "@items('For_Each_Item')?['confidence']",
+                                              "item/OwnerReason": "@coalesce(items('For_Each_Item')?['ownerReason'], '')",
+                                              "item/Evidence": "@outputs('Item_Evidence_Safe')"
+                                            },
+                                            "host": {
+                                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                              "operationId": "PostItem",
+                                              "connectionName": "shared_sharepointonline"
+                                            }
+                                          }
+                                        },
+                                        "Note_Created": {
+                                          "runAfter": {
+                                            "Log_Created": [
+                                              "Succeeded"
+                                            ]
+                                          },
+                                          "type": "AppendToStringVariable",
+                                          "inputs": {
+                                            "name": "varCreated",
+                                            "value": "@concat('<li>', outputs('Item_Title_Safe'), ' (due ', formatDateTime(outputs('Anchor_DateTime'), 'ddd, MMM d'), ')</li>')"
+                                          }
+                                        }
+                                      },
+                                      "else": {
+                                        "actions": {
+                                          "Log_Maybe": {
+                                            "type": "OpenApiConnection",
+                                            "inputs": {
+                                              "parameters": {
+                                                "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                                                "table": "@parameters('EDD Action Items List (plb_EddActionItemsList)')",
+                                                "item/Title": "@outputs('Item_Title_Safe')",
+                                                "item/DueDate": "@outputs('Item_Due_Date')",
+                                                "item/DueTime": "@outputs('Item_Due_Time')",
+                                                "item/Size/Value": "@if(equals(toLower(coalesce(items('For_Each_Item')?['size'], 'small')), 'big'), 'Big', 'Small')",
+                                                "item/Status/Value": "Maybe",
+                                                "item/LastAction/Value": "Maybe",
+                                                "item/ConversationId": "@items('For_Each_Thread')",
+                                                "item/DedupeKey": "@outputs('Dedupe_Key')",
+                                                "item/SourceLink": "@outputs('Source_Link')",
+                                                "item/Confidence": "@items('For_Each_Item')?['confidence']",
+                                                "item/OwnerReason": "@coalesce(items('For_Each_Item')?['ownerReason'], '')",
+                                                "item/Evidence": "@outputs('Item_Evidence_Safe')"
+                                              },
+                                              "host": {
+                                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                                "operationId": "PostItem",
+                                                "connectionName": "shared_sharepointonline"
+                                              }
+                                            }
+                                          },
+                                          "Note_Maybe": {
+                                            "runAfter": {
+                                              "Log_Maybe": [
+                                                "Succeeded"
+                                              ]
+                                            },
+                                            "type": "AppendToStringVariable",
+                                            "inputs": {
+                                              "name": "varMaybe",
+                                              "value": "@concat('<li>', outputs('Item_Title_Safe'), if(empty(outputs('Item_Due_Date')), ' (no clear date)', concat(' (possibly ', outputs('Item_Due_Date'), ')')), '</li>')"
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "expression": {
+                                        "and": [
+                                          {
+                                            "equals": [
+                                              "@outputs('Is_Confident')",
+                                              "@true"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "type": "If"
+                                    }
+                                  },
+                                  "runAfter": {
+                                    "Find_Duplicate": [
+                                      "Succeeded"
+                                    ]
+                                  },
+                                  "else": {
+                                    "actions": {}
+                                  },
+                                  "expression": {
+                                    "and": [
+                                      {
+                                        "equals": [
+                                          "@length(body('Find_Duplicate')?['value'])",
+                                          0
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "type": "If"
+                                }
+                              }
+                            },
+                            "Case_update": {
+                              "case": "update",
+                              "actions": {
+                                "Find_Existing_Item": {
+                                  "type": "Query",
+                                  "inputs": {
+                                    "from": "@union(body('Get_Thread_Items')?['value'], body('Filter_Upcoming_Items'))",
+                                    "where": "@and(equals(item()?['ID'], coalesce(items('For_Each_Item')?['existingItemId'], -1)), not(equals(item()?['Status']?['Value'], 'EventMissing')))"
+                                  }
+                                },
+                                "Found_Existing": {
+                                  "actions": {
+                                    "Existing_Item": {
+                                      "type": "Compose",
+                                      "inputs": "@first(body('Find_Existing_Item'))"
+                                    },
+                                    "Has_Event": {
+                                      "actions": {
+                                        "Try_Patch": {
+                                          "actions": {
+                                            "Update_Calendar_Event": {
+                                              "type": "OpenApiConnection",
+                                              "inputs": {
+                                                "parameters": {
+                                                  "Uri": "@concat('https://graph.microsoft.com/v1.0/me/events/', trim(outputs('Existing_Item')?['EventId']))",
+                                                  "Method": "PATCH",
+                                                  "Body": "@outputs('Event_Payload')",
+                                                  "ContentType": "application/json"
+                                                },
+                                                "host": {
+                                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                                                  "operationId": "HttpRequest",
+                                                  "connectionName": "shared_office365"
+                                                }
+                                              }
+                                            }
+                                          },
+                                          "type": "Scope"
+                                        },
+                                        "Patch_Worked": {
+                                          "actions": {
+                                            "Log_Updated": {
+                                              "type": "OpenApiConnection",
+                                              "inputs": {
+                                                "parameters": {
+                                                  "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                                                  "table": "@parameters('EDD Action Items List (plb_EddActionItemsList)')",
+                                                  "id": "@outputs('Existing_Item')?['ID']",
+                                                  "item/Title": "@outputs('Item_Title_Safe')",
+                                                  "item/DueDate": "@outputs('Item_Due_Date')",
+                                                  "item/DueTime": "@outputs('Item_Due_Time')",
+                                                  "item/Size/Value": "@if(equals(toLower(coalesce(items('For_Each_Item')?['size'], 'small')), 'big'), 'Big', 'Small')",
+                                                  "item/Status/Value": "Active",
+                                                  "item/LastAction/Value": "Updated",
+                                                  "item/DedupeKey": "@outputs('Dedupe_Key')",
+                                                  "item/Confidence": "@items('For_Each_Item')?['confidence']",
+                                                  "item/Evidence": "@outputs('Item_Evidence_Safe')"
+                                                },
+                                                "host": {
+                                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                                  "operationId": "PatchItem",
+                                                  "connectionName": "shared_sharepointonline"
+                                                }
+                                              }
+                                            },
+                                            "Note_Updated": {
+                                              "runAfter": {
+                                                "Log_Updated": [
+                                                  "Succeeded"
+                                                ]
+                                              },
+                                              "type": "AppendToStringVariable",
+                                              "inputs": {
+                                                "name": "varUpdated",
+                                                "value": "@concat('<li>', outputs('Item_Title_Safe'), ' (now due ', formatDateTime(outputs('Anchor_DateTime'), 'ddd, MMM d'), ')</li>')"
+                                              }
+                                            }
+                                          },
+                                          "runAfter": {
+                                            "Try_Patch": [
+                                              "Succeeded",
+                                              "Failed"
+                                            ]
+                                          },
+                                          "else": {
+                                            "actions": {}
+                                          },
+                                          "expression": {
+                                            "and": [
+                                              {
+                                                "equals": [
+                                                  "@first(result('Try_Patch'))?['status']",
+                                                  "Succeeded"
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          "type": "If"
+                                        },
+                                        "Event_Gone": {
+                                          "actions": {
+                                            "Mark_Event_Missing": {
+                                              "type": "OpenApiConnection",
+                                              "inputs": {
+                                                "parameters": {
+                                                  "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                                                  "table": "@parameters('EDD Action Items List (plb_EddActionItemsList)')",
+                                                  "id": "@outputs('Existing_Item')?['ID']",
+                                                  "item/Title": "@outputs('Existing_Item')?['Title']",
+                                                  "item/Status/Value": "EventMissing"
+                                                },
+                                                "host": {
+                                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                                  "operationId": "PatchItem",
+                                                  "connectionName": "shared_sharepointonline"
+                                                }
+                                              }
+                                            }
+                                          },
+                                          "runAfter": {
+                                            "Patch_Worked": [
+                                              "Succeeded"
+                                            ]
+                                          },
+                                          "else": {
+                                            "actions": {}
+                                          },
+                                          "expression": {
+                                            "and": [
+                                              {
+                                                "equals": [
+                                                  "@outputs('Update_Calendar_Event')?['statusCode']",
+                                                  404
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          "type": "If"
+                                        }
+                                      },
+                                      "runAfter": {
+                                        "Existing_Item": [
+                                          "Succeeded"
+                                        ]
+                                      },
+                                      "else": {
+                                        "actions": {
+                                          "Now_Confident": {
+                                            "actions": {
+                                              "Create_Event_From_Maybe": {
+                                                "type": "OpenApiConnection",
+                                                "inputs": {
+                                                  "parameters": {
+                                                    "Uri": "@if(empty(trim(coalesce(body('Get_Config')?['CalendarId'], ''))), 'https://graph.microsoft.com/v1.0/me/events', concat('https://graph.microsoft.com/v1.0/me/calendars/', trim(body('Get_Config')?['CalendarId']), '/events'))",
+                                                    "Method": "POST",
+                                                    "Body": "@outputs('Event_Payload')",
+                                                    "ContentType": "application/json"
+                                                  },
+                                                  "host": {
+                                                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                                                    "operationId": "HttpRequest",
+                                                    "connectionName": "shared_office365"
+                                                  }
+                                                }
+                                              },
+                                              "Promote_Maybe": {
+                                                "runAfter": {
+                                                  "Create_Event_From_Maybe": [
+                                                    "Succeeded"
+                                                  ]
+                                                },
+                                                "type": "OpenApiConnection",
+                                                "inputs": {
+                                                  "parameters": {
+                                                    "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                                                    "table": "@parameters('EDD Action Items List (plb_EddActionItemsList)')",
+                                                    "id": "@outputs('Existing_Item')?['ID']",
+                                                    "item/Title": "@outputs('Item_Title_Safe')",
+                                                    "item/DueDate": "@outputs('Item_Due_Date')",
+                                                    "item/DueTime": "@outputs('Item_Due_Time')",
+                                                    "item/Size/Value": "@if(equals(toLower(coalesce(items('For_Each_Item')?['size'], 'small')), 'big'), 'Big', 'Small')",
+                                                    "item/Status/Value": "Active",
+                                                    "item/LastAction/Value": "Created",
+                                                    "item/DedupeKey": "@outputs('Dedupe_Key')",
+                                                    "item/EventId": "@body('Create_Event_From_Maybe')?['id']",
+                                                    "item/Confidence": "@items('For_Each_Item')?['confidence']",
+                                                    "item/Evidence": "@outputs('Item_Evidence_Safe')"
+                                                  },
+                                                  "host": {
+                                                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                                                    "operationId": "PatchItem",
+                                                    "connectionName": "shared_sharepointonline"
+                                                  }
+                                                }
+                                              },
+                                              "Note_Promoted": {
+                                                "runAfter": {
+                                                  "Promote_Maybe": [
+                                                    "Succeeded"
+                                                  ]
+                                                },
+                                                "type": "AppendToStringVariable",
+                                                "inputs": {
+                                                  "name": "varCreated",
+                                                  "value": "@concat('<li>', outputs('Item_Title_Safe'), ' (due ', formatDateTime(outputs('Anchor_DateTime'), 'ddd, MMM d'), ')</li>')"
+                                                }
+                                              }
+                                            },
+                                            "else": {
+                                              "actions": {}
+                                            },
+                                            "expression": {
+                                              "and": [
+                                                {
+                                                  "equals": [
+                                                    "@outputs('Is_Confident')",
+                                                    "@true"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            "type": "If"
+                                          }
+                                        }
+                                      },
+                                      "expression": {
+                                        "and": [
+                                          {
+                                            "equals": [
+                                              "@and(not(empty(outputs('Existing_Item')?['EventId'])), outputs('Is_Confident'))",
+                                              "@true"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "type": "If"
+                                    }
+                                  },
+                                  "runAfter": {
+                                    "Find_Existing_Item": [
+                                      "Succeeded"
+                                    ]
+                                  },
+                                  "else": {
+                                    "actions": {}
+                                  },
+                                  "expression": {
+                                    "and": [
+                                      {
+                                        "greater": [
+                                          "@length(body('Find_Existing_Item'))",
+                                          0
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "type": "If"
+                                }
+                              }
+                            }
+                          },
+                          "default": {
+                            "actions": {}
+                          },
+                          "expression": "@toLower(items('For_Each_Item')?['action'])",
+                          "type": "Switch"
+                        }
+                      },
+                      "runAfter": {
+                        "Parse_AI_Items": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Foreach"
+                    }
+                  },
+                  "type": "Scope"
+                },
+                "Note_Skipped": {
+                  "runAfter": {
+                    "Thread_Try": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  },
+                  "type": "AppendToStringVariable",
+                  "inputs": {
+                    "name": "varSkipped",
+                    "value": "@concat('<li>', coalesce(body('Get_Thread_Messages')?['value']?[0]?['subject'], items('For_Each_Thread')), '</li>')"
+                  }
+                }
+              },
+              "runAfter": {
+                "Owner_Profile": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Foreach"
+            },
+            "Owner_Profile": {
+              "runAfter": {
+                "Distinct_Threads": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Compose",
+              "inputs": "Name: @{body('Get_Config')?['OwnerName']}\nEmail: @{body('Get_Config')?['OwnerEmail']}\nAlso known as: @{body('Get_Config')?['OwnerAliases']}\nGroups the owner belongs to: @{body('Get_Config')?['OwnerGroups']}\nGroup requests count as the owner's: @{if(equals(body('Get_Config')?['CountGroupRequests'], true), 'yes', 'no')}"
+            },
+            "Summary_Html": {
+              "runAfter": {
+                "For_Each_Thread": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Compose",
+              "inputs": "@concat(if(empty(variables('varCreated')), '', concat('<b>Added to your calendar</b><ul>', variables('varCreated'), '</ul>')), if(empty(variables('varUpdated')), '', concat('<b>Updated</b><ul>', variables('varUpdated'), '</ul>')), if(empty(variables('varMaybe')), '', concat('<b>Possible items, not added</b><ul>', variables('varMaybe'), '</ul><p>Add any of these yourself if they matter.</p>')))"
+            },
+            "Anything_To_Report": {
+              "actions": {
+                "Post_Summary": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "poster": "Flow bot",
+                      "location": "Chat with Flow bot",
+                      "body/recipient": "@body('Get_Config')?['OwnerEmail']",
+                      "body/messageBody": "<p class=\"editor-paragraph\">Email due-date check: @{outputs('Summary_Html')}</p>"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                      "operationId": "PostMessageToConversation",
+                      "connectionName": "shared_teams"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Summary_Html": [
+                  "Succeeded"
+                ]
+              },
+              "else": {
+                "actions": {}
+              },
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@empty(outputs('Summary_Html'))",
+                      "@false"
+                    ]
+                  }
+                ]
+              },
+              "type": "If"
+            },
+            "Anything_Skipped": {
+              "actions": {
+                "Alert_Skipped": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "parameters": {
+                      "poster": "Flow bot",
+                      "location": "Chat with Flow bot",
+                      "body/recipient": "@{parameters('EDD Alert Recipient (plb_EddAlertRecipient)')}",
+                      "body/messageBody": "<p class=\"editor-paragraph\">EDD skipped these threads in the requester's mailbox: @{concat('<ul>', variables('varSkipped'), '</ul>')}. Open the run to see which action failed. @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p>"
+                    },
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                      "operationId": "PostMessageToConversation",
+                      "connectionName": "shared_teams"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Anything_To_Report": [
+                  "Succeeded"
+                ]
+              },
+              "else": {
+                "actions": {}
+              },
+              "expression": {
+                "and": [
+                  {
+                    "equals": [
+                      "@empty(variables('varSkipped'))",
+                      "@false"
+                    ]
+                  }
+                ]
+              },
+              "type": "If"
+            },
+            "Save_Watermark": {
+              "runAfter": {
+                "Anything_Skipped": [
+                  "Succeeded"
+                ]
+              },
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "dataset": "@parameters('EDD Site URL (plb_EddSiteUrl)')",
+                  "table": "@parameters('EDD Config List (plb_EddConfigList)')",
+                  "id": 1,
+                  "item/Title": "Owner",
+                  "item/LastRunUtc": "@variables('varRunStartUtc')"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline",
+                  "operationId": "PatchItem",
+                  "connectionName": "shared_sharepointonline"
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Init_Skipped": [
+              "Succeeded"
+            ]
+          },
+          "type": "Scope"
+        },
+        "Catch": {
+          "actions": {
+            "Alert_Builder": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "parameters": {
+                  "poster": "Flow bot",
+                  "location": "Chat with Flow bot",
+                  "body/recipient": "@{parameters('EDD Alert Recipient (plb_EddAlertRecipient)')}",
+                  "body/messageBody": "<p class=\"editor-paragraph\">EDD due-date flow failed for the requester's mailbox. Run: @{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}</p>"
+                },
+                "host": {
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+                  "operationId": "PostMessageToConversation",
+                  "connectionName": "shared_teams"
+                }
+              }
+            },
+            "Mark_Failed": {
+              "runAfter": {
+                "Alert_Builder": [
+                  "Succeeded"
+                ]
+              },
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "EDD_FAILED",
+                  "message": "See Teams alert"
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Try": [
+              "Failed",
+              "TimedOut"
+            ]
+          },
+          "type": "Scope"
+        }
+      }
+    },
+    "templateName": null
+  },
+  "schemaVersion": "1.0.0.0"
+}
