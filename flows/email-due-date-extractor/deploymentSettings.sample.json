@@ -1,0 +1,46 @@
+{
+  "EnvironmentVariables": [
+    {
+      "SchemaName": "plb_EddSiteUrl",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_EddConfigList",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_EddActionItemsList",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_EddSenderRulesList",
+      "Value": ""
+    },
+    {
+      "SchemaName": "plb_EddAlertRecipient",
+      "Value": ""
+    }
+  ],
+  "ConnectionReferences": [
+    {
+      "LogicalName": "plb_sharedsharepointonline_mailboxowner",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+    },
+    {
+      "LogicalName": "plb_sharedoffice365_mailboxowner",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+    },
+    {
+      "LogicalName": "plb_sharedteams_mailboxowner",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_teams"
+    },
+    {
+      "LogicalName": "plb_sharedcommondataserviceforapps_mailboxowner",
+      "ConnectionId": "",
+      "ConnectorId": "/providers/Microsoft.PowerApps/apis/shared_commondataserviceforapps"
+    }
+  ]
+}
